@@ -1,36 +1,55 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# 合格プランナー(juken-planner)
 
-## Getting Started
+受験合格から逆算して学習スケジュールを自動生成する Web アプリ。
 
-First, run the development server:
+本命の試験日と教材(総量・1単位あたりの時間)を登録すると、残り期間を
+**基礎固め → 発展 → 直前対策** の3フェーズに分割し、曜日ごとの学習可能時間に
+応じて日次タスクを自動で割り振ります。遅れが出てもワンクリックで残り期間に
+再配分(リスケジュール)できます。
+
+## 主な機能
+
+- **逆算プラン自動生成**: 試験日・教材・学習可能時間から日次タスクを自動配分
+- **年間フェーズ表示**: 基礎固め/発展/直前対策のタイムラインを可視化
+- **進捗トラッキング**: 今日のタスクをチェックして消化。遅れは自動リスケ
+- **カレンダー**: 月間カレンダーにタスク量・模試/出願/試験日・フェーズ帯を表示
+- **学習記録・統計**: タスク完了で学習時間を自動記録。日別・科目別グラフ、教材別進捗
+
+## セットアップ
+
+### 1. Supabase プロジェクトの作成
+
+1. [Supabase](https://supabase.com/dashboard) で新規プロジェクトを作成
+2. SQL Editor で `supabase/migrations/0001_init.sql` の内容を実行
+3. Authentication → Providers で Email を有効化
+   (確認メールを省略する場合は「Confirm email」をオフ)
+
+### 2. 環境変数
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+cp .env.example .env.local
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+`.env.local` に Project Settings → API の URL / anon キーを設定します。
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+### 3. 起動
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+```bash
+nvm use          # Node v24
+npm install
+npm run dev      # http://localhost:3000
+```
 
-## Learn More
+## 技術スタック
 
-To learn more about Next.js, take a look at the following resources:
+- Next.js 16(App Router / TypeScript / Turbopack)
+- Tailwind CSS v4 + shadcn/ui
+- Supabase(Auth / Postgres / RLS)
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## 開発コマンド
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+```bash
+npm run dev     # 開発サーバー
+npm run build   # 本番ビルド
+npm run lint    # ESLint
+```
