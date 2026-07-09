@@ -151,6 +151,10 @@ begin
 end;
 $$;
 
+-- トリガー専用関数のため PostgREST 経由の直接実行は許可しない
+revoke execute on function public.handle_new_user()
+  from public, anon, authenticated;
+
 create trigger on_auth_user_created
   after insert on auth.users
   for each row execute procedure public.handle_new_user();
