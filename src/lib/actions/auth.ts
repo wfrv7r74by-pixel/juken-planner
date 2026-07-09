@@ -46,18 +46,32 @@ export async function signup(
   }
 
   const supabase = await createClient();
-  const { error } = await supabase.auth.signUp({
+  const { data, error } = await supabase.auth.signUp({
     email,
     password,
     options: { data: { display_name: displayName } },
   });
 
   if (error) {
+    const messages: Record<string, string> = {
+      user_already_exists: "このメールアドレスは既に登録されています。",
+      email_address_invalid: "このメールアドレスは使用できません。別のアドレスをお試しください。",
+      over_email_send_rate_limit:
+        "メール送信の上限に達しました。1時間ほど待ってから再度お試しください。",
+      weak_password: "パスワードが簡単すぎます。より複雑なものにしてください。",
+    };
     return {
       error:
-        error.code === "user_already_exists"
-          ? "このメールアドレスは既に登録されています。"
-          : "登録に失敗しました。時間をおいて再度お試しください。",
+        (error.code && messages[error.code]) ??
+        "登録に失敗しました。時間をおいて再度お試しください。",
+    };
+  }
+
+  // メール確認が有効な場合はセッションが作られない
+  if (!data.session) {
+    return {
+      error:
+        "確認メールを送信しました。メール内のリンクを開いて登録を完了してから、ログインしてください。",
     };
   }
 
