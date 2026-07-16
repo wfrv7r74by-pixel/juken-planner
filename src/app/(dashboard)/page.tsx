@@ -1,21 +1,21 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { differenceInCalendarDays, format } from "date-fns";
+import { addDays, differenceInCalendarDays, format } from "date-fns";
+import { ja } from "date-fns/locale";
 import {
-  ArrowRight,
-  BookOpen,
   CalendarClock,
-  Flag,
+  ChevronRight,
+  Flame,
+  PartyPopper,
   TriangleAlert,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { computePhaseWindows } from "@/lib/plan/engine";
 import { PhaseTimeline } from "@/components/features/dashboard/phase-timeline";
-import {
-  TaskList,
-  type TaskListItem,
-} from "@/components/features/dashboard/task-list";
+import { ProgressRing } from "@/components/features/dashboard/progress-ring";
+import { TaskCards } from "@/components/features/dashboard/task-cards";
+import type { TaskListItem } from "@/components/features/dashboard/task-list";
 import { RegenerateButton } from "@/components/features/plan/regenerate-button";
 import { Button } from "@/components/ui/button";
 import {
@@ -25,11 +25,23 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { Progress } from "@/components/ui/progress";
 
-export const metadata: Metadata = { title: "ホーム | 合格プランナー" };
+export const metadata: Metadata = { title: "今日 | 合格プランナー" };
 
-export default async function DashboardPage() {
+/** 学習記録の日付一覧から連続学習日数を計算(今日または昨日から遡る) */
+function calcStreak(logDates: Set<string>, today: Date): number {
+  let cursor = logDates.has(format(today, "yyyy-MM-dd"))
+    ? today
+    : addDays(today, -1);
+  let streak = 0;
+  while (logDates.has(format(cursor, "yyyy-MM-dd"))) {
+    streak++;
+    cursor = addDays(cursor, -1);
+  }
+  return streak;
+}
+
+export default async function TodayPage() {
   const supabase = await createClient();
   const {
     data: { user },
@@ -39,16 +51,20 @@ export default async function DashboardPage() {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   const todayStr = format(today, "yyyy-MM-dd");
+  const tomorrowStr = format(addDays(today, 1), "yyyy-MM-dd");
+  const streakFrom = format(addDays(today, -120), "yyyy-MM-dd");
 
   const [
     targetRes,
     settingsRes,
-    todayTasksRes,
+    tasksRes,
     materialsRes,
     subjectsRes,
     doneTasksRes,
     overdueRes,
     upcomingRes,
+    logDatesRes,
+    nextTaskRes,
   ] = await Promise.all([
     supabase
       .from("milestones")
@@ -62,7 +78,7 @@ export default async function DashboardPage() {
       .from("study_tasks")
       .select("*")
       .eq("user_id", user.id)
-      .eq("date", todayStr)
+      .in("date", [todayStr, tomorrowStr])
       .order("created_at"),
     supabase.from("materials").select("*").eq("user_id", user.id),
     supabase.from("subjects").select("*").eq("user_id", user.id),
@@ -83,18 +99,34 @@ export default async function DashboardPage() {
       .eq("user_id", user.id)
       .gte("date", todayStr)
       .order("date")
-      .limit(4),
+      .limit(3),
+    supabase
+      .from("study_logs")
+      .select("date")
+      .eq("user_id", user.id)
+      .gte("date", streakFrom),
+    supabase
+      .from("study_tasks")
+      .select("date")
+      .eq("user_id", user.id)
+      .eq("status", "pending")
+      .gt("date", todayStr)
+      .order("date")
+      .limit(1)
+      .maybeSingle(),
   ]);
 
   const anyError =
     targetRes.error ||
     settingsRes.error ||
-    todayTasksRes.error ||
+    tasksRes.error ||
     materialsRes.error ||
     subjectsRes.error ||
     doneTasksRes.error ||
     overdueRes.error ||
-    upcomingRes.error;
+    upcomingRes.error ||
+    logDatesRes.error ||
+    nextTaskRes.error;
   if (anyError || !settingsRes.data) {
     return (
       <p className="text-sm text-destructive">
@@ -103,35 +135,21 @@ export default async function DashboardPage() {
     );
   }
 
+  // 目標未設定ならウィザードへ
   const target = targetRes.data;
+  if (!target) redirect("/setup");
+
   const materials = materialsRes.data;
   const subjects = subjectsRes.data;
-
-  // オンボーディング: 本命試験日がまだない
-  if (!target) {
-    return (
-      <div className="mx-auto max-w-xl space-y-4 pt-10 text-center">
-        <Flag className="mx-auto size-10 text-primary" />
-        <h1 className="text-2xl font-bold">まずは目標を設定しましょう</h1>
-        <p className="text-muted-foreground">
-          本命の試験日を登録すると、合格から逆算した学習プランを自動生成できます。
-        </p>
-        <Button asChild>
-          <Link href="/settings">
-            試験日を設定する <ArrowRight className="size-4" />
-          </Link>
-        </Button>
-      </div>
-    );
-  }
+  const settings = settingsRes.data;
 
   const examDate = new Date(`${target.date}T00:00:00`);
   const daysLeft = differenceInCalendarDays(examDate, today);
   const windows = computePhaseWindows(
     today,
     examDate,
-    settingsRes.data.basic_ratio,
-    settingsRes.data.advance_ratio,
+    settings.basic_ratio,
+    settings.advance_ratio,
   );
 
   // 全体進捗(見積もり時間ベース)
@@ -150,16 +168,14 @@ export default async function DashboardPage() {
       Math.min(doneByMaterial.get(m.id) ?? 0, m.total_units) *
       m.minutes_per_unit;
   }
-  const progressPct =
+  const overallPct =
     totalMinutes > 0 ? Math.round((doneMinutes / totalMinutes) * 100) : 0;
 
   const materialById = new Map(materials.map((m) => [m.id, m]));
   const subjectById = new Map(subjects.map((s) => [s.id, s]));
-  const todayTasks: TaskListItem[] = todayTasksRes.data.map((t) => {
+  const toItem = (t: (typeof tasksRes.data)[number]): TaskListItem => {
     const material = materialById.get(t.material_id);
-    const subject = material
-      ? subjectById.get(material.subject_id)
-      : undefined;
+    const subject = material ? subjectById.get(material.subject_id) : undefined;
     return {
       ...t,
       materialTitle: material?.title ?? "不明な教材",
@@ -170,127 +186,196 @@ export default async function DashboardPage() {
         t.planned_units * (material?.minutes_per_unit ?? 0),
       ),
     };
-  });
-  const todayDoneCount = todayTasks.filter((t) => t.status === "done").length;
+  };
+
+  const todayTasks = tasksRes.data.filter((t) => t.date === todayStr).map(toItem);
+  const tomorrowTasks = tasksRes.data
+    .filter((t) => t.date === tomorrowStr)
+    .map(toItem);
+
+  const todayDone = todayTasks.filter((t) => t.status === "done").length;
+  const todayPct =
+    todayTasks.length > 0
+      ? Math.round((todayDone / todayTasks.length) * 100)
+      : 0;
+  const todayMinutes = todayTasks.reduce(
+    (a, t) => a + t.estimatedMinutes,
+    0,
+  );
+  const todayCapacity =
+    settings.weekday_minutes[String(today.getDay())] ?? 0;
+  const overloaded = todayCapacity > 0 && todayMinutes > todayCapacity * 1.2;
+
+  const streak = calcStreak(
+    new Set(logDatesRes.data.map((l) => l.date)),
+    today,
+  );
   const overdueCount = overdueRes.count ?? 0;
+  const allDone = todayTasks.length > 0 && todayDone === todayTasks.length;
 
   return (
-    <div className="mx-auto max-w-4xl space-y-6">
-      {/* カウントダウン */}
-      <Card className="bg-gradient-to-r from-primary to-phase-advance text-white">
-        <CardContent className="flex flex-wrap items-center justify-between gap-4 py-2">
+    <div className="mx-auto max-w-lg space-y-5">
+      {/* ヒーロー: 今日 */}
+      <div className="rounded-3xl bg-gradient-to-br from-primary via-primary to-phase-advance p-5 text-white shadow-lg">
+        <div className="flex items-center justify-between">
           <div>
-            <p className="text-sm/6 opacity-90">{target.title}</p>
-            <p className="text-4xl font-bold">
-              あと {daysLeft} <span className="text-xl font-medium">日</span>
+            <p className="text-sm/6 opacity-90">
+              {format(today, "M月d日(E)", { locale: ja })}
             </p>
-            <p className="text-sm opacity-90">{target.date}</p>
+            <p className="text-lg font-bold">{target.title}まで</p>
+            <p className="text-5xl font-black tracking-tight">
+              {daysLeft}
+              <span className="ml-1 text-lg font-bold">日</span>
+            </p>
+            <div className="mt-2 flex items-center gap-3 text-sm">
+              <span className="flex items-center gap-1 rounded-full bg-white/15 px-2.5 py-0.5 font-bold">
+                <Flame className="size-4 text-amber-300" />
+                {streak}日連続
+              </span>
+              <span className="opacity-90">全体 {overallPct}%</span>
+            </div>
           </div>
-          <div className="min-w-40 flex-1 sm:max-w-60">
-            <p className="mb-1 text-sm opacity-90">全体進捗 {progressPct}%</p>
-            <Progress
-              value={progressPct}
-              className="h-3 bg-white/25 [&>[data-slot=progress-indicator]]:bg-white"
-            />
-          </div>
-        </CardContent>
-      </Card>
+          <ProgressRing value={todayPct} size={110} className="text-white">
+            <span className="text-3xl font-black">
+              {todayDone}
+              <span className="text-base font-bold opacity-80">
+                /{todayTasks.length}
+              </span>
+            </span>
+            <span className="text-[10px] font-bold uppercase tracking-wide opacity-80">
+              今日の達成
+            </span>
+          </ProgressRing>
+        </div>
+      </div>
 
       {/* 遅れの警告 */}
       {overdueCount > 0 && (
-        <Card className="border-phase-final/50 bg-phase-final/5">
-          <CardContent className="flex flex-wrap items-center justify-between gap-3 py-1">
-            <p className="flex items-center gap-2 text-sm">
-              <TriangleAlert className="size-4 text-phase-final" />
-              期限を過ぎた未完了タスクが {overdueCount} 件あります。
-              残り期間で無理なく再配分しましょう。
-            </p>
-            <RegenerateButton label="リスケジュール" variant="secondary" />
-          </CardContent>
-        </Card>
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-phase-final/40 bg-phase-final/10 p-3">
+          <p className="flex items-center gap-2 text-sm font-medium">
+            <TriangleAlert className="size-4 shrink-0 text-phase-final" />
+            遅れが{overdueCount}件。残り日数で組み直せます
+          </p>
+          <RegenerateButton label="組み直す" variant="secondary" />
+        </div>
       )}
 
-      <div className="grid gap-6 lg:grid-cols-3">
-        {/* 今日のタスク */}
-        <Card className="lg:col-span-2">
-          <CardHeader>
-            <CardTitle className="flex items-center justify-between">
-              今日のタスク
-              <span className="text-sm font-normal text-muted-foreground">
-                {todayDoneCount}/{todayTasks.length} 完了
-              </span>
-            </CardTitle>
-            <CardDescription>{todayStr}</CardDescription>
-          </CardHeader>
-          <CardContent>
-            {materials.length === 0 ? (
-              <div className="space-y-3 py-4 text-center">
-                <BookOpen className="mx-auto size-8 text-muted-foreground" />
+      {/* 今日のタスク */}
+      <section className="space-y-3">
+        <div className="flex items-baseline justify-between">
+          <h2 className="text-lg font-bold">今日やること</h2>
+          {todayTasks.length > 0 && (
+            <span
+              className={
+                overloaded
+                  ? "text-sm font-bold text-phase-final"
+                  : "text-sm text-muted-foreground"
+              }
+            >
+              合計 約{todayMinutes}分
+              {overloaded && ` (設定${todayCapacity}分を超過)`}
+            </span>
+          )}
+        </div>
+
+        {materials.length === 0 ? (
+          <Card>
+            <CardContent className="space-y-3 py-6 text-center">
+              <p className="text-sm text-muted-foreground">
+                教材がまだ登録されていません。
+              </p>
+              <Button asChild>
+                <Link href="/setup">かんたんセットアップで始める</Link>
+              </Button>
+            </CardContent>
+          </Card>
+        ) : todayTasks.length === 0 ? (
+          nextTaskRes.data ? (
+            <Card>
+              <CardContent className="space-y-1 py-6 text-center">
+                <p className="text-2xl">🌤️</p>
+                <p className="font-bold">今日はおやすみ日</p>
                 <p className="text-sm text-muted-foreground">
-                  教材を登録するとプランを生成できます。
+                  次のタスクは{" "}
+                  {nextTaskRes.data.date.slice(5).replace("-", "/")}{" "}
+                  です。しっかり休むのも実力のうち!
                 </p>
-                <Button asChild variant="outline">
-                  <Link href="/materials">教材を登録する</Link>
-                </Button>
-              </div>
-            ) : todayTasks.length === 0 ? (
-              <div className="space-y-3 py-4 text-center">
+              </CardContent>
+            </Card>
+          ) : (
+            <Card>
+              <CardContent className="space-y-3 py-6 text-center">
                 <p className="text-sm text-muted-foreground">
-                  プランがまだ生成されていません。
+                  今日のタスクはありません。プランを生成しましょう。
                 </p>
                 <RegenerateButton label="プランを生成する" />
+              </CardContent>
+            </Card>
+          )
+        ) : (
+          <>
+            {allDone && (
+              <div className="flex items-center gap-3 rounded-2xl bg-success/10 p-4 text-success">
+                <PartyPopper className="size-6 shrink-0" />
+                <p className="text-sm font-bold">
+                  今日の分は全部完了!この調子で積み上げよう 🎉
+                </p>
               </div>
-            ) : (
-              <TaskList tasks={todayTasks} />
             )}
-          </CardContent>
-        </Card>
+            <TaskCards tasks={todayTasks} />
+          </>
+        )}
+      </section>
 
-        {/* 直近のマイルストーン */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <CalendarClock className="size-4" />
-              今後の予定
+      {/* 明日のチラ見せ */}
+      {tomorrowTasks.length > 0 && (
+        <p className="text-center text-sm text-muted-foreground">
+          明日は {tomorrowTasks.length}件・約
+          {tomorrowTasks.reduce((a, t) => a + t.estimatedMinutes, 0)}分の予定
+        </p>
+      )}
+
+      {/* 年間フェーズ */}
+      <Card className="rounded-2xl">
+        <CardHeader className="pb-2">
+          <CardTitle className="text-base">年間の見通し</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <PhaseTimeline windows={windows} today={todayStr} />
+        </CardContent>
+      </Card>
+
+      {/* 今後の予定 */}
+      {upcomingRes.data.length > 0 && (
+        <Card className="rounded-2xl">
+          <CardHeader className="pb-2">
+            <CardTitle className="flex items-center gap-2 text-base">
+              <CalendarClock className="size-4" /> 今後の予定
             </CardTitle>
+            <CardDescription>
+              <Link
+                href="/calendar"
+                className="flex items-center text-xs text-primary"
+              >
+                カレンダーで見る <ChevronRight className="size-3" />
+              </Link>
+            </CardDescription>
           </CardHeader>
           <CardContent>
-            <ul className="space-y-3">
-              {upcomingRes.data.length === 0 && (
-                <li className="text-sm text-muted-foreground">
-                  予定はありません
-                </li>
-              )}
+            <ul className="space-y-2">
               {upcomingRes.data.map((m) => (
                 <li key={m.id} className="flex items-baseline gap-2 text-sm">
                   <span className="whitespace-nowrap font-mono text-muted-foreground">
                     {m.date.slice(5).replace("-", "/")}
                   </span>
                   <span className="min-w-0 flex-1">{m.title}</span>
-                  {m.is_target && (
-                    <span className="text-milestone" title="本命">
-                      ★
-                    </span>
-                  )}
+                  {m.is_target && <span className="text-milestone">★</span>}
                 </li>
               ))}
             </ul>
           </CardContent>
         </Card>
-      </div>
-
-      {/* 年間フェーズ */}
-      <Card>
-        <CardHeader>
-          <CardTitle>年間の見通し</CardTitle>
-          <CardDescription>
-            基礎固め → 発展 → 直前対策 の3フェーズで試験日まで進みます
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <PhaseTimeline windows={windows} today={todayStr} />
-        </CardContent>
-      </Card>
+      )}
     </div>
   );
 }

@@ -14,7 +14,7 @@ export interface NavItem {
 }
 
 export const NAV_ITEMS: NavItem[] = [
-  { href: "/", label: "ホーム", icon: House },
+  { href: "/", label: "今日", icon: House },
   { href: "/calendar", label: "カレンダー", icon: CalendarDays },
   { href: "/materials", label: "教材", icon: BookOpen },
   { href: "/stats", label: "統計", icon: ChartColumn },

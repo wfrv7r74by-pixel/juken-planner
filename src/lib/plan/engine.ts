@@ -112,9 +112,14 @@ function buildDays(
   return days;
 }
 
+/** 1回の学習セッションの最低時間(分)。これ未満の細切れは数日おきにまとめる */
+export const MIN_SESSION_MINUTES = 15;
+
 /**
  * 1教材の残り単位数を、期間内の各日へ学習可能時間に比例して割り振る。
  * 累積丸めで合計が必ず remainingUnits に一致するようにする。
+ * 1日あたりの割り当てが MIN_SESSION_MINUTES 未満になる場合は、
+ * 毎日細切れにせず数日おきのまとまったセッションに集約する。
  */
 export function allocateMaterial(
   material: MaterialInput,
@@ -128,24 +133,47 @@ export function allocateMaterial(
   }
   const totalWeight = weights.reduce((a, b) => a + b, 0);
 
+  // 最低セッションに満たない配分は次の日以降へ繰り越して集約する
+  const minUnitsPerSession = Math.max(
+    1,
+    Math.ceil(MIN_SESSION_MINUTES / material.minutesPerUnit),
+  );
+
   const tasks: PlannedTask[] = [];
   let allocated = 0;
   let cumWeight = 0;
+  let carried = 0; // 繰り越し中の単位数
   for (let i = 0; i < days.length; i++) {
     cumWeight += weights[i];
     const target = Math.round(
       (material.remainingUnits * cumWeight) / totalWeight,
     );
-    const units = target - allocated;
-    if (units <= 0) continue;
+    carried += target - (allocated + carried);
+    if (carried <= 0) continue;
+
+    // 初日は最低セッション分を前倒しして必ず着手できるようにする
+    if (i === 0 && allocated === 0) {
+      carried = Math.min(
+        material.remainingUnits,
+        Math.max(carried, minUnitsPerSession),
+      );
+    }
+
+    const remainingAfter = material.remainingUnits - allocated - carried;
+    const isLastDay = i === days.length - 1;
+    // まとまった量に達するか、最終日か、残り全部がここで終わるなら出力
+    if (carried < minUnitsPerSession && !isLastDay && remainingAfter > 0) {
+      continue;
+    }
     tasks.push({
       material_id: material.id,
       date: days[i].date,
-      planned_units: units,
+      planned_units: carried,
       unit_start: material.doneUnits + allocated + 1,
-      unit_end: material.doneUnits + allocated + units,
+      unit_end: material.doneUnits + allocated + carried,
     });
-    allocated += units;
+    allocated += carried;
+    carried = 0;
   }
   return tasks;
 }
