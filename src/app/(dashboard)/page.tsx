@@ -2,46 +2,17 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { addDays, differenceInCalendarDays, format } from "date-fns";
-import { ja } from "date-fns/locale";
-import {
-  CalendarClock,
-  ChevronRight,
-  Flame,
-  PartyPopper,
-  TriangleAlert,
-} from "lucide-react";
+import { Sparkles } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
-import { computePhaseWindows } from "@/lib/plan/engine";
-import { PhaseTimeline } from "@/components/features/dashboard/phase-timeline";
-import { ProgressRing } from "@/components/features/dashboard/progress-ring";
-import { TaskCards } from "@/components/features/dashboard/task-cards";
-import type { TaskListItem } from "@/components/features/dashboard/task-list";
-import { RegenerateButton } from "@/components/features/plan/regenerate-button";
-import { Button } from "@/components/ui/button";
 import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+  DashboardTabs,
+  type SubjectMinutes,
+} from "@/components/features/dashboard/dashboard-tabs";
+import { Button } from "@/components/ui/button";
 
-export const metadata: Metadata = { title: "今日 | 合格プランナー" };
+export const metadata: Metadata = { title: "受験ダッシュボード | 合格プランナー" };
 
-/** 学習記録の日付一覧から連続学習日数を計算(今日または昨日から遡る) */
-function calcStreak(logDates: Set<string>, today: Date): number {
-  let cursor = logDates.has(format(today, "yyyy-MM-dd"))
-    ? today
-    : addDays(today, -1);
-  let streak = 0;
-  while (logDates.has(format(cursor, "yyyy-MM-dd"))) {
-    streak++;
-    cursor = addDays(cursor, -1);
-  }
-  return streak;
-}
-
-export default async function TodayPage() {
+export default async function DashboardPage() {
   const supabase = await createClient();
   const {
     data: { user },
@@ -51,20 +22,18 @@ export default async function TodayPage() {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   const todayStr = format(today, "yyyy-MM-dd");
-  const tomorrowStr = format(addDays(today, 1), "yyyy-MM-dd");
-  const streakFrom = format(addDays(today, -120), "yyyy-MM-dd");
+  const from30 = format(addDays(today, -29), "yyyy-MM-dd");
 
   const [
     targetRes,
-    settingsRes,
-    tasksRes,
-    materialsRes,
+    nextRes,
+    phasesRes,
+    blocksRes,
     subjectsRes,
-    doneTasksRes,
-    overdueRes,
-    upcomingRes,
-    logDatesRes,
-    nextTaskRes,
+    todayLogsRes,
+    logs30Res,
+    notesRes,
+    profileRes,
   ] = await Promise.all([
     supabase
       .from("milestones")
@@ -73,61 +42,56 @@ export default async function TodayPage() {
       .eq("is_target", true)
       .limit(1)
       .maybeSingle(),
-    supabase.from("plan_settings").select("*").eq("user_id", user.id).single(),
-    supabase
-      .from("study_tasks")
-      .select("*")
-      .eq("user_id", user.id)
-      .in("date", [todayStr, tomorrowStr])
-      .order("created_at"),
-    supabase.from("materials").select("*").eq("user_id", user.id),
-    supabase.from("subjects").select("*").eq("user_id", user.id),
-    supabase
-      .from("study_tasks")
-      .select("material_id, planned_units")
-      .eq("user_id", user.id)
-      .eq("status", "done"),
-    supabase
-      .from("study_tasks")
-      .select("id", { count: "exact", head: true })
-      .eq("user_id", user.id)
-      .eq("status", "pending")
-      .lt("date", todayStr),
     supabase
       .from("milestones")
       .select("*")
       .eq("user_id", user.id)
+      .eq("is_target", false)
       .gte("date", todayStr)
-      .order("date")
-      .limit(3),
-    supabase
-      .from("study_logs")
-      .select("date")
-      .eq("user_id", user.id)
-      .gte("date", streakFrom),
-    supabase
-      .from("study_tasks")
-      .select("date")
-      .eq("user_id", user.id)
-      .eq("status", "pending")
-      .gt("date", todayStr)
       .order("date")
       .limit(1)
       .maybeSingle(),
+    supabase
+      .from("phases")
+      .select("*")
+      .eq("user_id", user.id)
+      .order("start_date"),
+    supabase
+      .from("routine_blocks")
+      .select("*")
+      .eq("user_id", user.id)
+      .order("start_time"),
+    supabase.from("subjects").select("*").eq("user_id", user.id),
+    supabase
+      .from("study_logs")
+      .select("memo")
+      .eq("user_id", user.id)
+      .eq("date", todayStr)
+      .like("memo", "block:%"),
+    supabase
+      .from("study_logs")
+      .select("date, minutes, subject_id")
+      .eq("user_id", user.id)
+      .gte("date", from30),
+    supabase
+      .from("daily_notes")
+      .select("*")
+      .eq("user_id", user.id)
+      .order("date", { ascending: false })
+      .limit(30),
+    supabase.from("profiles").select("display_name").eq("id", user.id).single(),
   ]);
 
   const anyError =
     targetRes.error ||
-    settingsRes.error ||
-    tasksRes.error ||
-    materialsRes.error ||
+    nextRes.error ||
+    phasesRes.error ||
+    blocksRes.error ||
     subjectsRes.error ||
-    doneTasksRes.error ||
-    overdueRes.error ||
-    upcomingRes.error ||
-    logDatesRes.error ||
-    nextTaskRes.error;
-  if (anyError || !settingsRes.data) {
+    todayLogsRes.error ||
+    logs30Res.error ||
+    notesRes.error;
+  if (anyError) {
     return (
       <p className="text-sm text-destructive">
         データの読み込みに失敗しました。時間をおいて再度お試しください。
@@ -135,246 +99,200 @@ export default async function TodayPage() {
     );
   }
 
-  // 目標未設定ならウィザードへ
   const target = targetRes.data;
-  if (!target) redirect("/setup");
+  const phases = phasesRes.data;
 
-  const materials = materialsRes.data;
-  const subjects = subjectsRes.data;
-  const settings = settingsRes.data;
-
-  const examDate = new Date(`${target.date}T00:00:00`);
-  const daysLeft = differenceInCalendarDays(examDate, today);
-  const windows = computePhaseWindows(
-    today,
-    examDate,
-    settings.basic_ratio,
-    settings.advance_ratio,
+  // 現在のフェーズ
+  const currentPhaseIndex = phases.findIndex(
+    (p) => p.start_date <= todayStr && todayStr <= p.end_date,
   );
-
-  // 全体進捗(見積もり時間ベース)
-  const doneByMaterial = new Map<string, number>();
-  for (const t of doneTasksRes.data) {
-    doneByMaterial.set(
-      t.material_id,
-      (doneByMaterial.get(t.material_id) ?? 0) + t.planned_units,
-    );
+  const currentPhase =
+    currentPhaseIndex >= 0 ? phases[currentPhaseIndex] : null;
+  let phaseProgress = 0;
+  let phaseDaysLeft = 0;
+  if (currentPhase) {
+    const start = new Date(`${currentPhase.start_date}T00:00:00`);
+    const end = new Date(`${currentPhase.end_date}T00:00:00`);
+    const total = differenceInCalendarDays(end, start) + 1;
+    const elapsed = differenceInCalendarDays(today, start) + 1;
+    phaseProgress = Math.round((elapsed / total) * 100);
+    phaseDaysLeft = differenceInCalendarDays(end, today);
   }
-  let totalMinutes = 0;
-  let doneMinutes = 0;
-  for (const m of materials) {
-    totalMinutes += m.total_units * m.minutes_per_unit;
-    doneMinutes +=
-      Math.min(doneByMaterial.get(m.id) ?? 0, m.total_units) *
-      m.minutes_per_unit;
+
+  const finalDaysLeft = target
+    ? differenceInCalendarDays(new Date(`${target.date}T00:00:00`), today)
+    : null;
+  const next = nextRes.data;
+  const nextDaysLeft = next
+    ? differenceInCalendarDays(new Date(`${next.date}T00:00:00`), today)
+    : null;
+
+  // 分析用の集計
+  const minutesByDate = new Map<string, number>();
+  for (let i = 13; i >= 0; i--) {
+    minutesByDate.set(format(addDays(today, -i), "yyyy-MM-dd"), 0);
   }
-  const overallPct =
-    totalMinutes > 0 ? Math.round((doneMinutes / totalMinutes) * 100) : 0;
+  const subjectMinutesMap = new Map<string, number>();
+  let totalMinutes30 = 0;
+  for (const log of logs30Res.data) {
+    if (minutesByDate.has(log.date)) {
+      minutesByDate.set(log.date, (minutesByDate.get(log.date) ?? 0) + log.minutes);
+    }
+    totalMinutes30 += log.minutes;
+    if (log.subject_id) {
+      subjectMinutesMap.set(
+        log.subject_id,
+        (subjectMinutesMap.get(log.subject_id) ?? 0) + log.minutes,
+      );
+    }
+  }
+  const subjectMinutes: SubjectMinutes[] = subjectsRes.data.map((s) => ({
+    name: s.name,
+    color: s.color,
+    minutes: subjectMinutesMap.get(s.id) ?? 0,
+  }));
 
-  const materialById = new Map(materials.map((m) => [m.id, m]));
-  const subjectById = new Map(subjects.map((s) => [s.id, s]));
-  const toItem = (t: (typeof tasksRes.data)[number]): TaskListItem => {
-    const material = materialById.get(t.material_id);
-    const subject = material ? subjectById.get(material.subject_id) : undefined;
-    return {
-      ...t,
-      materialTitle: material?.title ?? "不明な教材",
-      unitLabel: material?.unit_label ?? "",
-      subjectName: subject?.name ?? "-",
-      subjectColor: subject?.color ?? "#64748b",
-      estimatedMinutes: Math.round(
-        t.planned_units * (material?.minutes_per_unit ?? 0),
-      ),
-    };
-  };
+  const doneBlockIds = todayLogsRes.data
+    .map((l) => l.memo?.replace("block:", "") ?? "")
+    .filter(Boolean);
 
-  const todayTasks = tasksRes.data.filter((t) => t.date === todayStr).map(toItem);
-  const tomorrowTasks = tasksRes.data
-    .filter((t) => t.date === tomorrowStr)
-    .map(toItem);
+  const todayNote =
+    notesRes.data.find((n) => n.date === todayStr) ?? null;
 
-  const todayDone = todayTasks.filter((t) => t.status === "done").length;
-  const todayPct =
-    todayTasks.length > 0
-      ? Math.round((todayDone / todayTasks.length) * 100)
-      : 0;
-  const todayMinutes = todayTasks.reduce(
-    (a, t) => a + t.estimatedMinutes,
-    0,
-  );
-  const todayCapacity =
-    settings.weekday_minutes[String(today.getDay())] ?? 0;
-  const overloaded = todayCapacity > 0 && todayMinutes > todayCapacity * 1.2;
-
-  const streak = calcStreak(
-    new Set(logDatesRes.data.map((l) => l.date)),
-    today,
-  );
-  const overdueCount = overdueRes.count ?? 0;
-  const allDone = todayTasks.length > 0 && todayDone === todayTasks.length;
+  const isEmpty =
+    !target && phases.length === 0 && blocksRes.data.length === 0;
 
   return (
-    <div className="mx-auto max-w-lg space-y-5">
-      {/* ヒーロー: 今日 */}
-      <div className="rounded-3xl bg-gradient-to-br from-primary via-primary to-phase-advance p-5 text-white shadow-lg">
-        <div className="flex items-center justify-between">
-          <div>
-            <p className="text-sm/6 opacity-90">
-              {format(today, "M月d日(E)", { locale: ja })}
-            </p>
-            <p className="text-lg font-bold">{target.title}まで</p>
-            <p className="text-5xl font-black tracking-tight">
-              {daysLeft}
-              <span className="ml-1 text-lg font-bold">日</span>
-            </p>
-            <div className="mt-2 flex items-center gap-3 text-sm">
-              <span className="flex items-center gap-1 rounded-full bg-white/15 px-2.5 py-0.5 font-bold">
-                <Flame className="size-4 text-amber-300" />
-                {streak}日連続
-              </span>
-              <span className="opacity-90">全体 {overallPct}%</span>
-            </div>
-          </div>
-          <ProgressRing value={todayPct} size={110} className="text-white">
-            <span className="text-3xl font-black">
-              {todayDone}
-              <span className="text-base font-bold opacity-80">
-                /{todayTasks.length}
-              </span>
-            </span>
-            <span className="text-[10px] font-bold uppercase tracking-wide opacity-80">
-              今日の達成
-            </span>
-          </ProgressRing>
-        </div>
+    <div className="mx-auto max-w-2xl space-y-4">
+      {/* ヘッダー */}
+      <div>
+        <p className="font-mono text-xs tracking-[0.3em] text-muted-foreground uppercase">
+          {target ? target.title : "GOAL NOT SET"}
+        </p>
+        <h1 className="text-2xl font-black tracking-tight">受験ダッシュボード</h1>
+        <p className="text-sm text-muted-foreground">
+          スケジュール確認 + 毎日の振り返り
+        </p>
       </div>
 
-      {/* 遅れの警告 */}
-      {overdueCount > 0 && (
-        <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-phase-final/40 bg-phase-final/10 p-3">
-          <p className="flex items-center gap-2 text-sm font-medium">
-            <TriangleAlert className="size-4 shrink-0 text-phase-final" />
-            遅れが{overdueCount}件。残り日数で組み直せます
+      {isEmpty ? (
+        <div className="space-y-4 rounded-2xl border border-primary/30 bg-card p-8 text-center">
+          <Sparkles className="mx-auto size-10 text-primary" />
+          <h2 className="text-lg font-bold">AI と一緒に計画を作ろう</h2>
+          <p className="text-sm text-muted-foreground">
+            志望校・試験日・今の状況を AI に話すと、フェーズ戦略と
+            1日のルーティンを一緒に組み立てられます。
           </p>
-          <RegenerateButton label="組み直す" variant="secondary" />
+          <Button asChild size="lg">
+            <Link href="/ai">
+              <Sparkles className="size-4" /> AI に相談して始める
+            </Link>
+          </Button>
         </div>
-      )}
-
-      {/* 今日のタスク */}
-      <section className="space-y-3">
-        <div className="flex items-baseline justify-between">
-          <h2 className="text-lg font-bold">今日やること</h2>
-          {todayTasks.length > 0 && (
-            <span
-              className={
-                overloaded
-                  ? "text-sm font-bold text-phase-final"
-                  : "text-sm text-muted-foreground"
-              }
-            >
-              合計 約{todayMinutes}分
-              {overloaded && ` (設定${todayCapacity}分を超過)`}
-            </span>
-          )}
-        </div>
-
-        {materials.length === 0 ? (
-          <Card>
-            <CardContent className="space-y-3 py-6 text-center">
-              <p className="text-sm text-muted-foreground">
-                教材がまだ登録されていません。
-              </p>
-              <Button asChild>
-                <Link href="/setup">かんたんセットアップで始める</Link>
-              </Button>
-            </CardContent>
-          </Card>
-        ) : todayTasks.length === 0 ? (
-          nextTaskRes.data ? (
-            <Card>
-              <CardContent className="space-y-1 py-6 text-center">
-                <p className="text-2xl">🌤️</p>
-                <p className="font-bold">今日はおやすみ日</p>
-                <p className="text-sm text-muted-foreground">
-                  次のタスクは{" "}
-                  {nextTaskRes.data.date.slice(5).replace("-", "/")}{" "}
-                  です。しっかり休むのも実力のうち!
+      ) : (
+        <>
+          {/* NOW フェーズ */}
+          {currentPhase ? (
+            <div className="rounded-2xl border border-success/40 bg-card p-4">
+              <div className="flex items-baseline justify-between">
+                <p className="font-mono text-xs tracking-[0.25em] text-success">
+                  NOW — フェーズ{"①②③④⑤⑥⑦⑧⑨⑩"[currentPhaseIndex] ?? currentPhaseIndex + 1}
                 </p>
-              </CardContent>
-            </Card>
-          ) : (
-            <Card>
-              <CardContent className="space-y-3 py-6 text-center">
-                <p className="text-sm text-muted-foreground">
-                  今日のタスクはありません。プランを生成しましょう。
-                </p>
-                <RegenerateButton label="プランを生成する" />
-              </CardContent>
-            </Card>
-          )
-        ) : (
-          <>
-            {allDone && (
-              <div className="flex items-center gap-3 rounded-2xl bg-success/10 p-4 text-success">
-                <PartyPopper className="size-6 shrink-0" />
-                <p className="text-sm font-bold">
-                  今日の分は全部完了!この調子で積み上げよう 🎉
+                <p className="text-xs text-muted-foreground">
+                  〜{currentPhase.end_date.replaceAll("-", "/")}
                 </p>
               </div>
-            )}
-            <TaskCards tasks={todayTasks} />
-          </>
-        )}
-      </section>
+              <p className="mt-1 text-lg font-bold">{currentPhase.name}</p>
+              {currentPhase.memo && (
+                <p className="mt-0.5 text-xs text-muted-foreground">
+                  {currentPhase.memo}
+                </p>
+              )}
+              <div className="mt-3 flex items-center justify-between text-xs">
+                <span className="text-muted-foreground">フェーズ進捗</span>
+                <span className="font-bold text-success">
+                  {phaseProgress}% / 残{phaseDaysLeft}日
+                </span>
+              </div>
+              <div className="mt-1.5 h-2 overflow-hidden rounded-full bg-muted">
+                <div
+                  className="h-full rounded-full bg-success"
+                  style={{ width: `${Math.min(100, phaseProgress)}%` }}
+                />
+              </div>
+            </div>
+          ) : (
+            phases.length > 0 && (
+              <div className="rounded-2xl border bg-card p-4 text-sm text-muted-foreground">
+                現在進行中のフェーズがありません。
+                <Link href="/ai" className="ml-1 text-primary underline">
+                  AI に相談して調整する
+                </Link>
+              </div>
+            )
+          )}
 
-      {/* 明日のチラ見せ */}
-      {tomorrowTasks.length > 0 && (
-        <p className="text-center text-sm text-muted-foreground">
-          明日は {tomorrowTasks.length}件・約
-          {tomorrowTasks.reduce((a, t) => a + t.estimatedMinutes, 0)}分の予定
-        </p>
-      )}
+          {/* NEXT / FINAL カウントダウン */}
+          <div className="grid grid-cols-2 gap-3">
+            <div className="rounded-2xl border border-success/40 bg-card p-4">
+              <p className="font-mono text-[10px] tracking-[0.25em] text-muted-foreground">
+                NEXT
+              </p>
+              {next ? (
+                <>
+                  <p className="truncate font-bold text-success">{next.title}</p>
+                  <p className="text-3xl font-black">
+                    {nextDaysLeft}
+                    <span className="ml-1 text-sm font-medium text-muted-foreground">
+                      日後
+                    </span>
+                  </p>
+                </>
+              ) : (
+                <p className="mt-2 text-sm text-muted-foreground">予定なし</p>
+              )}
+            </div>
+            <div className="rounded-2xl border border-destructive/50 bg-card p-4">
+              <p className="font-mono text-[10px] tracking-[0.25em] text-muted-foreground">
+                FINAL
+              </p>
+              {target ? (
+                <>
+                  <p className="truncate font-bold text-destructive">
+                    {target.title}
+                  </p>
+                  <p className="text-3xl font-black">
+                    {finalDaysLeft}
+                    <span className="ml-1 text-sm font-medium text-muted-foreground">
+                      日後
+                    </span>
+                  </p>
+                </>
+              ) : (
+                <p className="mt-2 text-sm text-muted-foreground">
+                  <Link href="/ai" className="text-primary underline">
+                    本命試験日を設定
+                  </Link>
+                </p>
+              )}
+            </div>
+          </div>
 
-      {/* 年間フェーズ */}
-      <Card className="rounded-2xl">
-        <CardHeader className="pb-2">
-          <CardTitle className="text-base">年間の見通し</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <PhaseTimeline windows={windows} today={todayStr} />
-        </CardContent>
-      </Card>
-
-      {/* 今後の予定 */}
-      {upcomingRes.data.length > 0 && (
-        <Card className="rounded-2xl">
-          <CardHeader className="pb-2">
-            <CardTitle className="flex items-center gap-2 text-base">
-              <CalendarClock className="size-4" /> 今後の予定
-            </CardTitle>
-            <CardDescription>
-              <Link
-                href="/calendar"
-                className="flex items-center text-xs text-primary"
-              >
-                カレンダーで見る <ChevronRight className="size-3" />
-              </Link>
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <ul className="space-y-2">
-              {upcomingRes.data.map((m) => (
-                <li key={m.id} className="flex items-baseline gap-2 text-sm">
-                  <span className="whitespace-nowrap font-mono text-muted-foreground">
-                    {m.date.slice(5).replace("-", "/")}
-                  </span>
-                  <span className="min-w-0 flex-1">{m.title}</span>
-                  {m.is_target && <span className="text-milestone">★</span>}
-                </li>
-              ))}
-            </ul>
-          </CardContent>
-        </Card>
+          {/* タブ(予定/振返/履歴/分析) */}
+          <DashboardTabs
+            todayStr={todayStr}
+            todayWeekday={today.getDay()}
+            blocks={blocksRes.data}
+            subjects={subjectsRes.data}
+            doneBlockIds={doneBlockIds}
+            todayNote={todayNote}
+            notes={notesRes.data}
+            minutesByDate={[...minutesByDate.entries()]}
+            subjectMinutes={subjectMinutes}
+            totalMinutes30={totalMinutes30}
+            displayName={profileRes.data?.display_name ?? ""}
+          />
+        </>
       )}
     </div>
   );

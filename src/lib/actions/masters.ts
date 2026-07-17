@@ -2,8 +2,11 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
-import type { MilestoneKind, Phase, WeekdayMinutes } from "@/types/database";
-import type { ActionResult } from "@/lib/actions/plan";
+import type { BlockCategory, MilestoneKind } from "@/types/database";
+
+export interface ActionResult {
+  error: string | null;
+}
 
 const ok: ActionResult = { error: null };
 
@@ -20,7 +23,7 @@ function revalidateAll() {
 }
 
 // ============================================================
-// マイルストーン(試験日・模試・出願)
+// マイルストーン(本命試験・模試・出願・節目)
 // ============================================================
 
 export async function addMilestone(formData: FormData): Promise<ActionResult> {
@@ -35,13 +38,12 @@ export async function addMilestone(formData: FormData): Promise<ActionResult> {
   if (!title || !date) return { error: "名称と日付を入力してください。" };
 
   if (isTarget) {
-    // 本命は常に1件: 既存の is_target を外す
     const { error } = await supabase
       .from("milestones")
       .update({ is_target: false })
       .eq("user_id", user.id)
       .eq("is_target", true);
-    if (error) return { error: "既存の本命試験の更新に失敗しました。" };
+    if (error) return { error: "既存の本命の更新に失敗しました。" };
   }
 
   const { error } = await supabase.from("milestones").insert({
@@ -51,7 +53,7 @@ export async function addMilestone(formData: FormData): Promise<ActionResult> {
     kind,
     is_target: isTarget,
   });
-  if (error) return { error: "マイルストーンの登録に失敗しました。" };
+  if (error) return { error: "登録に失敗しました。" };
 
   revalidateAll();
   return ok;
@@ -73,7 +75,204 @@ export async function deleteMilestone(id: string): Promise<ActionResult> {
 }
 
 // ============================================================
-// 科目
+// フェーズ
+// ============================================================
+
+export async function addPhase(formData: FormData): Promise<ActionResult> {
+  const { supabase, user } = await getUser();
+  if (!user) return { error: "ログインが必要です。" };
+
+  const name = String(formData.get("name") ?? "").trim();
+  const startDate = String(formData.get("start_date") ?? "");
+  const endDate = String(formData.get("end_date") ?? "");
+  const memo = String(formData.get("memo") ?? "").trim();
+
+  if (!name || !startDate || !endDate) {
+    return { error: "名前と期間を入力してください。" };
+  }
+  if (startDate > endDate) {
+    return { error: "開始日は終了日より前にしてください。" };
+  }
+
+  const { error } = await supabase.from("phases").insert({
+    user_id: user.id,
+    name,
+    start_date: startDate,
+    end_date: endDate,
+    memo: memo || null,
+  });
+  if (error) return { error: "フェーズの登録に失敗しました。" };
+
+  revalidateAll();
+  return ok;
+}
+
+export async function deletePhase(id: string): Promise<ActionResult> {
+  const { supabase, user } = await getUser();
+  if (!user) return { error: "ログインが必要です。" };
+
+  const { error } = await supabase
+    .from("phases")
+    .delete()
+    .eq("id", id)
+    .eq("user_id", user.id);
+  if (error) return { error: "削除に失敗しました。" };
+
+  revalidateAll();
+  return ok;
+}
+
+// ============================================================
+// ルーティン(曜日別時間ブロック)
+// ============================================================
+
+export async function addRoutineBlock(
+  formData: FormData,
+): Promise<ActionResult> {
+  const { supabase, user } = await getUser();
+  if (!user) return { error: "ログインが必要です。" };
+
+  const weekdays = formData.getAll("weekday").map(Number);
+  const startTime = String(formData.get("start_time") ?? "");
+  const endTime = String(formData.get("end_time") ?? "");
+  const title = String(formData.get("title") ?? "").trim();
+  const category = String(
+    formData.get("category") ?? "study",
+  ) as BlockCategory;
+  const subjectId = String(formData.get("subject_id") ?? "");
+
+  if (weekdays.length === 0 || weekdays.some((w) => !Number.isInteger(w) || w < 0 || w > 6)) {
+    return { error: "曜日を選択してください。" };
+  }
+  if (!startTime || !endTime || startTime >= endTime) {
+    return { error: "開始・終了時刻を正しく入力してください。" };
+  }
+  if (!title) return { error: "内容を入力してください。" };
+
+  const { error } = await supabase.from("routine_blocks").insert(
+    weekdays.map((weekday) => ({
+      user_id: user.id,
+      weekday,
+      start_time: startTime,
+      end_time: endTime,
+      title,
+      category,
+      subject_id: subjectId || null,
+    })),
+  );
+  if (error) return { error: "ブロックの登録に失敗しました。" };
+
+  revalidateAll();
+  return ok;
+}
+
+export async function deleteRoutineBlock(id: string): Promise<ActionResult> {
+  const { supabase, user } = await getUser();
+  if (!user) return { error: "ログインが必要です。" };
+
+  const { error } = await supabase
+    .from("routine_blocks")
+    .delete()
+    .eq("id", id)
+    .eq("user_id", user.id);
+  if (error) return { error: "削除に失敗しました。" };
+
+  revalidateAll();
+  return ok;
+}
+
+/**
+ * 勉強ブロックの完了トグル。
+ * 完了で study_logs に自動記録し、取り消しで該当記録を削除する。
+ */
+export async function toggleBlockDone(
+  blockId: string,
+  date: string,
+): Promise<ActionResult> {
+  const { supabase, user } = await getUser();
+  if (!user) return { error: "ログインが必要です。" };
+
+  const { data: block, error: blockError } = await supabase
+    .from("routine_blocks")
+    .select("*")
+    .eq("id", blockId)
+    .eq("user_id", user.id)
+    .single();
+  if (blockError || !block) return { error: "ブロックが見つかりません。" };
+
+  const memoKey = `block:${blockId}`;
+  const { data: existing, error: findError } = await supabase
+    .from("study_logs")
+    .select("id")
+    .eq("user_id", user.id)
+    .eq("date", date)
+    .eq("memo", memoKey)
+    .maybeSingle();
+  if (findError) return { error: "記録の確認に失敗しました。" };
+
+  if (existing) {
+    const { error } = await supabase
+      .from("study_logs")
+      .delete()
+      .eq("id", existing.id);
+    if (error) return { error: "取り消しに失敗しました。" };
+  } else {
+    const [sh, sm] = block.start_time.split(":").map(Number);
+    const [eh, em] = block.end_time.split(":").map(Number);
+    const minutes = Math.max(1, eh * 60 + em - (sh * 60 + sm));
+    const { error } = await supabase.from("study_logs").insert({
+      user_id: user.id,
+      subject_id: block.subject_id,
+      date,
+      minutes,
+      memo: memoKey,
+      source: "task",
+    });
+    if (error) return { error: "記録に失敗しました。" };
+  }
+
+  revalidateAll();
+  return ok;
+}
+
+// ============================================================
+// 振り返り(daily_notes)
+// ============================================================
+
+export async function upsertDailyNote(
+  formData: FormData,
+): Promise<ActionResult> {
+  const { supabase, user } = await getUser();
+  if (!user) return { error: "ログインが必要です。" };
+
+  const date = String(formData.get("date") ?? "");
+  const mood = Number(formData.get("mood"));
+  const good = String(formData.get("good") ?? "").trim();
+  const issue = String(formData.get("issue") ?? "").trim();
+  const memo = String(formData.get("memo") ?? "").trim();
+
+  if (!date) return { error: "日付が不正です。" };
+
+  const { error } = await supabase.from("daily_notes").upsert(
+    {
+      user_id: user.id,
+      date,
+      mood: Number.isInteger(mood) && mood >= 1 && mood <= 5 ? mood : null,
+      good: good || null,
+      issue: issue || null,
+      memo: memo || null,
+      updated_at: new Date().toISOString(),
+    },
+    { onConflict: "user_id,date" },
+  );
+  if (error) return { error: "振り返りの保存に失敗しました。" };
+
+  revalidateAll();
+  return ok;
+}
+
+// ============================================================
+// 科目・教材・章
 // ============================================================
 
 export async function addSubject(formData: FormData): Promise<ActionResult> {
@@ -102,45 +301,7 @@ export async function deleteSubject(id: string): Promise<ActionResult> {
     .delete()
     .eq("id", id)
     .eq("user_id", user.id);
-  if (error) return { error: "削除に失敗しました。関連する教材も確認してください。" };
-
-  revalidateAll();
-  return ok;
-}
-
-// ============================================================
-// 教材
-// ============================================================
-
-export async function addMaterial(formData: FormData): Promise<ActionResult> {
-  const { supabase, user } = await getUser();
-  if (!user) return { error: "ログインが必要です。" };
-
-  const subjectId = String(formData.get("subject_id") ?? "");
-  const title = String(formData.get("title") ?? "").trim();
-  const totalUnits = Number(formData.get("total_units"));
-  const unitLabel = String(formData.get("unit_label") ?? "ページ").trim();
-  const minutesPerUnit = Number(formData.get("minutes_per_unit"));
-  const phase = String(formData.get("phase") ?? "basic") as Phase;
-
-  if (!subjectId || !title) return { error: "科目と教材名を入力してください。" };
-  if (!Number.isFinite(totalUnits) || totalUnits <= 0) {
-    return { error: "総量は1以上の数値で入力してください。" };
-  }
-  if (!Number.isFinite(minutesPerUnit) || minutesPerUnit <= 0) {
-    return { error: "1単位あたりの分数は正の数値で入力してください。" };
-  }
-
-  const { error } = await supabase.from("materials").insert({
-    user_id: user.id,
-    subject_id: subjectId,
-    title,
-    total_units: Math.floor(totalUnits),
-    unit_label: unitLabel || "ページ",
-    minutes_per_unit: minutesPerUnit,
-    phase,
-  });
-  if (error) return { error: "教材の登録に失敗しました。" };
+  if (error) return { error: "削除に失敗しました。" };
 
   revalidateAll();
   return ok;
@@ -161,56 +322,38 @@ export async function deleteMaterial(id: string): Promise<ActionResult> {
   return ok;
 }
 
-// ============================================================
-// プラン設定(曜日別学習時間・フェーズ配分)
-// ============================================================
-
-export async function updatePlanSettings(
-  formData: FormData,
-): Promise<ActionResult> {
+/** 章のステータスを todo → doing → done → todo と循環させる */
+export async function cycleSectionStatus(id: string): Promise<ActionResult> {
   const { supabase, user } = await getUser();
   if (!user) return { error: "ログインが必要です。" };
 
-  const weekdayMinutes: WeekdayMinutes = {};
-  for (let dow = 0; dow <= 6; dow++) {
-    const v = Number(formData.get(`weekday_${dow}`));
-    if (!Number.isFinite(v) || v < 0 || v > 1440) {
-      return { error: "学習時間は0〜1440分の範囲で入力してください。" };
-    }
-    weekdayMinutes[String(dow)] = Math.floor(v);
-  }
+  const { data: section, error: findError } = await supabase
+    .from("material_sections")
+    .select("status")
+    .eq("id", id)
+    .eq("user_id", user.id)
+    .single();
+  if (findError || !section) return { error: "章が見つかりません。" };
 
-  const basicPct = Number(formData.get("basic_pct"));
-  const advancePct = Number(formData.get("advance_pct"));
-  if (
-    !Number.isFinite(basicPct) ||
-    !Number.isFinite(advancePct) ||
-    basicPct < 1 ||
-    advancePct < 1 ||
-    basicPct + advancePct > 98
-  ) {
-    return {
-      error: "フェーズ配分は各1%以上、合計98%以下で入力してください(残りが直前期になります)。",
-    };
-  }
+  const next =
+    section.status === "todo"
+      ? "doing"
+      : section.status === "doing"
+        ? "done"
+        : "todo";
 
   const { error } = await supabase
-    .from("plan_settings")
-    .update({
-      weekday_minutes: weekdayMinutes,
-      basic_ratio: basicPct / 100,
-      advance_ratio: advancePct / 100,
-      updated_at: new Date().toISOString(),
-    })
-    .eq("user_id", user.id);
-  if (error) return { error: "設定の保存に失敗しました。" };
+    .from("material_sections")
+    .update({ status: next })
+    .eq("id", id);
+  if (error) return { error: "更新に失敗しました。" };
 
   revalidateAll();
   return ok;
 }
 
 // ============================================================
-// 学習記録(手動)
+// 学習記録
 // ============================================================
 
 export async function addStudyLog(formData: FormData): Promise<ActionResult> {

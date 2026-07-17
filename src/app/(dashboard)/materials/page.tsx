@@ -1,12 +1,10 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { redirect } from "next/navigation";
+import { Sparkles } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
-import { SubjectManager } from "@/components/features/materials/subject-manager";
-import {
-  MaterialManager,
-  type MaterialWithProgress,
-} from "@/components/features/materials/material-manager";
-import { RegenerateButton } from "@/components/features/plan/regenerate-button";
+import { MaterialList } from "@/components/features/materials/material-list";
+import { Button } from "@/components/ui/button";
 
 export const metadata: Metadata = { title: "教材 | 合格プランナー" };
 
@@ -17,53 +15,59 @@ export default async function MaterialsPage() {
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  const [subjectsRes, materialsRes, doneTasksRes] = await Promise.all([
-    supabase
-      .from("subjects")
-      .select("*")
-      .eq("user_id", user.id)
-      .order("sort_order")
-      .order("created_at"),
+  const [materialsRes, sectionsRes, subjectsRes] = await Promise.all([
     supabase
       .from("materials")
       .select("*")
       .eq("user_id", user.id)
       .order("created_at"),
-    supabase
-      .from("study_tasks")
-      .select("material_id, planned_units")
-      .eq("user_id", user.id)
-      .eq("status", "done"),
+    supabase.from("material_sections").select("*").eq("user_id", user.id),
+    supabase.from("subjects").select("*").eq("user_id", user.id),
   ]);
 
-  if (subjectsRes.error || materialsRes.error || doneTasksRes.error) {
+  if (materialsRes.error || sectionsRes.error || subjectsRes.error) {
     return (
       <p className="text-sm text-destructive">
-        データの読み込みに失敗しました。時間をおいて再度お試しください。
+        データの読み込みに失敗しました。
       </p>
     );
   }
 
-  const doneByMaterial = new Map<string, number>();
-  for (const t of doneTasksRes.data) {
-    doneByMaterial.set(
-      t.material_id,
-      (doneByMaterial.get(t.material_id) ?? 0) + t.planned_units,
-    );
-  }
-  const materials: MaterialWithProgress[] = materialsRes.data.map((m) => ({
-    ...m,
-    doneUnits: Math.min(doneByMaterial.get(m.id) ?? 0, m.total_units),
-  }));
-
   return (
-    <div className="mx-auto max-w-3xl space-y-6">
+    <div className="mx-auto max-w-2xl space-y-4">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold">教材・科目</h1>
-        <RegenerateButton variant="outline" />
+        <div>
+          <h1 className="text-2xl font-black">教材</h1>
+          <p className="text-sm text-muted-foreground">
+            章をタップして進捗を更新(未着手→進行中→完了)
+          </p>
+        </div>
+        <Button asChild variant="outline" size="sm">
+          <Link href="/ai">
+            <Sparkles className="size-4" /> AIで追加
+          </Link>
+        </Button>
       </div>
-      <SubjectManager subjects={subjectsRes.data} />
-      <MaterialManager subjects={subjectsRes.data} materials={materials} />
+
+      {materialsRes.data.length === 0 ? (
+        <div className="space-y-3 rounded-2xl border border-dashed p-8 text-center">
+          <p className="text-sm text-muted-foreground">
+            まだ教材がありません。AI に「〇〇(教材名)を追加して」と話すと、
+            ネットで目次を調べて章ごとに分割してくれます。
+          </p>
+          <Button asChild>
+            <Link href="/ai">
+              <Sparkles className="size-4" /> AI に教材を追加してもらう
+            </Link>
+          </Button>
+        </div>
+      ) : (
+        <MaterialList
+          materials={materialsRes.data}
+          sections={sectionsRes.data}
+          subjects={subjectsRes.data}
+        />
+      )}
     </div>
   );
 }

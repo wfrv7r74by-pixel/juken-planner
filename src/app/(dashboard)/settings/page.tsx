@@ -2,8 +2,7 @@ import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { MilestoneManager } from "@/components/features/settings/milestone-manager";
-import { PlanSettingsForm } from "@/components/features/settings/plan-settings-form";
-import { RegenerateButton } from "@/components/features/plan/regenerate-button";
+import { PhaseManager } from "@/components/features/settings/phase-manager";
 
 export const metadata: Metadata = { title: "設定 | 合格プランナー" };
 
@@ -14,31 +13,32 @@ export default async function SettingsPage() {
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  const [milestonesRes, settingsRes] = await Promise.all([
+  const [milestonesRes, phasesRes] = await Promise.all([
     supabase
       .from("milestones")
       .select("*")
       .eq("user_id", user.id)
       .order("date"),
-    supabase.from("plan_settings").select("*").eq("user_id", user.id).single(),
+    supabase
+      .from("phases")
+      .select("*")
+      .eq("user_id", user.id)
+      .order("start_date"),
   ]);
 
-  if (milestonesRes.error || settingsRes.error || !settingsRes.data) {
+  if (milestonesRes.error || phasesRes.error) {
     return (
       <p className="text-sm text-destructive">
-        設定の読み込みに失敗しました。時間をおいて再度お試しください。
+        設定の読み込みに失敗しました。
       </p>
     );
   }
 
   return (
-    <div className="mx-auto max-w-3xl space-y-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold">設定</h1>
-        <RegenerateButton variant="outline" />
-      </div>
+    <div className="mx-auto max-w-2xl space-y-6">
+      <h1 className="text-2xl font-black">設定</h1>
       <MilestoneManager milestones={milestonesRes.data} />
-      <PlanSettingsForm settings={settingsRes.data} />
+      <PhaseManager phases={phasesRes.data} />
     </div>
   );
 }
