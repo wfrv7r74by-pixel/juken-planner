@@ -202,6 +202,70 @@ export async function sendChatMessage(content: string): Promise<ActionResult> {
   return { error: null };
 }
 
+/**
+ * AI から先に提案を切り出してもらう。
+ * 内部指示は履歴に保存せず、AI の応答だけを保存する。
+ */
+export async function requestAiProposal(): Promise<ActionResult> {
+  const { supabase, user } = await getUser();
+  if (!user) return { error: "ログインが必要です。" };
+
+  if (!process.env.ANTHROPIC_API_KEY) {
+    return {
+      error:
+        "AI 機能が未設定です。.env.local に ANTHROPIC_API_KEY を設定してサーバーを再起動してください。",
+    };
+  }
+
+  const [profileRes, historyRes] = await Promise.all([
+    supabase.from("profiles").select("display_name").eq("id", user.id).single(),
+    supabase
+      .from("chat_messages")
+      .select("role, content")
+      .eq("user_id", user.id)
+      .order("created_at", { ascending: false })
+      .limit(24),
+  ]);
+  if (historyRes.error) return { error: "履歴の取得に失敗しました。" };
+
+  const context = await buildContext(
+    supabase,
+    user.id,
+    profileRes.data?.display_name ?? "",
+  );
+
+  const kickoff =
+    "(システム: ユーザーが「AIからの提案」を要求しました。現状データを分析し、いま一番決めるべき・直すべきことを1つ選んで、あなたから具体的に提案してください。挨拶や前置きは不要です)";
+
+  const history = [...historyRes.data].reverse();
+  let turn;
+  try {
+    turn = await runChat(
+      [...history, { role: "user", content: kickoff }],
+      context,
+    );
+  } catch (e) {
+    console.error("AI proposal failed:", e);
+    return {
+      error:
+        "AI の応答に失敗しました。APIキーの設定・クレジット残高を確認して、もう一度お試しください。",
+    };
+  }
+
+  const metadata: ChatMetadata | null =
+    turn.proposals.length > 0 ? { proposals: turn.proposals } : null;
+  const { error: insertError } = await supabase.from("chat_messages").insert({
+    user_id: user.id,
+    role: "assistant",
+    content: turn.text,
+    metadata,
+  });
+  if (insertError) return { error: "応答の保存に失敗しました。" };
+
+  revalidatePath("/", "layout");
+  return { error: null };
+}
+
 /** チャット履歴を全削除する */
 export async function clearChat(): Promise<ActionResult> {
   const { supabase, user } = await getUser();

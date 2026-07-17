@@ -63,7 +63,7 @@ export function MilestoneManager({ milestones }: { milestones: Milestone[] }) {
       <CardHeader>
         <CardTitle>試験日程・マイルストーン</CardTitle>
         <CardDescription>
-          「本命」に設定した試験日を基準に逆算プランが作られます
+          「本命」がダッシュボードの FINAL、直近の予定が NEXT に表示されます
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">

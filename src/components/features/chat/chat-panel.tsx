@@ -1,9 +1,13 @@
 "use client";
 
 import { useEffect, useRef, useState, useTransition } from "react";
-import { Loader2, Send, Sparkles, Trash2 } from "lucide-react";
+import { Loader2, Send, Sparkles, Trash2, Wand2 } from "lucide-react";
 import { toast } from "sonner";
-import { clearChat, sendChatMessage } from "@/lib/actions/chat";
+import {
+  clearChat,
+  requestAiProposal,
+  sendChatMessage,
+} from "@/lib/actions/chat";
 import { ProposalCard } from "@/components/features/chat/proposal-card";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -43,6 +47,14 @@ export function ChatPanel({ messages }: { messages: ChatMessage[] }) {
     });
   };
 
+  const askProposal = () => {
+    if (pending) return;
+    startTransition(async () => {
+      const res = await requestAiProposal();
+      if (res.error) toast.error(res.error);
+    });
+  };
+
   const onClear = () => {
     if (!confirm("チャット履歴をすべて削除しますか?")) return;
     startTransition(async () => {
@@ -63,9 +75,24 @@ export function ChatPanel({ messages }: { messages: ChatMessage[] }) {
           </p>
         </div>
         {messages.length > 0 && (
-          <Button variant="ghost" size="sm" onClick={onClear} disabled={pending}>
-            <Trash2 className="size-4" />
-          </Button>
+          <div className="flex items-center gap-1">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={askProposal}
+              disabled={pending}
+            >
+              <Wand2 className="size-4" /> 提案をもらう
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={onClear}
+              disabled={pending}
+            >
+              <Trash2 className="size-4" />
+            </Button>
+          </div>
         )}
       </div>
 
@@ -73,8 +100,17 @@ export function ChatPanel({ messages }: { messages: ChatMessage[] }) {
       <div className="flex-1 space-y-3 overflow-y-auto pb-4">
         {messages.length === 0 && !optimistic && (
           <div className="space-y-3 pt-6">
-            <p className="text-center text-sm text-muted-foreground">
-              まずは状況を教えてください。例えば…
+            <button
+              type="button"
+              onClick={askProposal}
+              disabled={pending}
+              className="flex w-full items-center justify-center gap-2 rounded-xl border border-primary/50 bg-primary/10 p-4 text-sm font-bold text-primary transition-colors hover:bg-primary/20"
+            >
+              <Wand2 className="size-4" />
+              今の状況から AI に提案してもらう
+            </button>
+            <p className="text-center text-xs text-muted-foreground">
+              または、自分から話しかける…
             </p>
             {STARTERS.map((starter) => (
               <button

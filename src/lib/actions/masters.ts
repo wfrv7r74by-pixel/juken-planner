@@ -23,6 +23,30 @@ function revalidateAll() {
 }
 
 // ============================================================
+// アカウント
+// ============================================================
+
+export async function updateDisplayName(
+  formData: FormData,
+): Promise<ActionResult> {
+  const { supabase, user } = await getUser();
+  if (!user) return { error: "ログインが必要です。" };
+
+  const displayName = String(formData.get("display_name") ?? "").trim();
+  if (!displayName) return { error: "名前を入力してください。" };
+  if (displayName.length > 30) return { error: "名前は30文字以内にしてください。" };
+
+  const { error } = await supabase
+    .from("profiles")
+    .update({ display_name: displayName })
+    .eq("id", user.id);
+  if (error) return { error: "名前の更新に失敗しました。" };
+
+  revalidateAll();
+  return ok;
+}
+
+// ============================================================
 // マイルストーン(本命試験・模試・出願・節目)
 // ============================================================
 
