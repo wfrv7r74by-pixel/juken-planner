@@ -9,6 +9,9 @@ import {
   type SubjectMinutes,
 } from "@/components/features/dashboard/dashboard-tabs";
 import { Button } from "@/components/ui/button";
+import { GlowCard } from "@/components/ui/aceternity/glow-card";
+import { NumberTicker } from "@/components/ui/aceternity/number-ticker";
+import { Spotlight } from "@/components/ui/aceternity/spotlight";
 
 export const metadata: Metadata = { title: "受験ダッシュボード | 合格プランナー" };
 
@@ -164,8 +167,9 @@ export default async function DashboardPage() {
 
   return (
     <div className="mx-auto max-w-2xl space-y-4">
+      <Spotlight className="-top-40 left-1/2 -translate-x-1/2" fill="#60a5fa" />
       {/* ヘッダー */}
-      <div>
+      <div className="relative">
         <p className="font-mono text-xs tracking-[0.3em] text-muted-foreground uppercase">
           {target ? target.title : "GOAL NOT SET"}
         </p>
@@ -193,7 +197,7 @@ export default async function DashboardPage() {
         <>
           {/* NOW フェーズ */}
           {currentPhase ? (
-            <div className="rounded-2xl border border-success/40 bg-card p-4">
+            <GlowCard glow="34,197,94" className="border-success/40 p-4">
               <div className="flex items-baseline justify-between">
                 <p className="font-mono text-xs tracking-[0.25em] text-success">
                   NOW — フェーズ{"①②③④⑤⑥⑦⑧⑨⑩"[currentPhaseIndex] ?? currentPhaseIndex + 1}
@@ -220,7 +224,7 @@ export default async function DashboardPage() {
                   style={{ width: `${Math.min(100, phaseProgress)}%` }}
                 />
               </div>
-            </div>
+            </GlowCard>
           ) : (
             phases.length > 0 && (
               <div className="rounded-2xl border bg-card p-4 text-sm text-muted-foreground">
@@ -234,7 +238,7 @@ export default async function DashboardPage() {
 
           {/* NEXT / FINAL カウントダウン */}
           <div className="grid grid-cols-2 gap-3">
-            <div className="rounded-2xl border border-success/40 bg-card p-4">
+            <GlowCard glow="34,197,94" className="border-success/40 p-4">
               <p className="font-mono text-[10px] tracking-[0.25em] text-muted-foreground">
                 NEXT
               </p>
@@ -242,7 +246,7 @@ export default async function DashboardPage() {
                 <>
                   <p className="truncate font-bold text-success">{next.title}</p>
                   <p className="text-3xl font-black">
-                    {nextDaysLeft}
+                    <NumberTicker value={nextDaysLeft ?? 0} />
                     <span className="ml-1 text-sm font-medium text-muted-foreground">
                       日後
                     </span>
@@ -251,8 +255,8 @@ export default async function DashboardPage() {
               ) : (
                 <p className="mt-2 text-sm text-muted-foreground">予定なし</p>
               )}
-            </div>
-            <div className="rounded-2xl border border-destructive/50 bg-card p-4">
+            </GlowCard>
+            <GlowCard glow="248,113,113" className="border-destructive/50 p-4">
               <p className="font-mono text-[10px] tracking-[0.25em] text-muted-foreground">
                 FINAL
               </p>
@@ -262,7 +266,7 @@ export default async function DashboardPage() {
                     {target.title}
                   </p>
                   <p className="text-3xl font-black">
-                    {finalDaysLeft}
+                    <NumberTicker value={finalDaysLeft ?? 0} />
                     <span className="ml-1 text-sm font-medium text-muted-foreground">
                       日後
                     </span>
@@ -275,7 +279,7 @@ export default async function DashboardPage() {
                   </Link>
                 </p>
               )}
-            </div>
+            </GlowCard>
           </div>
 
           {/* タブ(予定/振返/履歴/分析) */}
