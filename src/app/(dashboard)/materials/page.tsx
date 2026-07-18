@@ -4,7 +4,7 @@ import { redirect } from "next/navigation";
 import { Sparkles } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { MaterialList } from "@/components/features/materials/material-list";
-import { Button } from "@/components/ui/button";
+import { MaterialSearch } from "@/components/features/materials/material-search";
 
 export const metadata: Metadata = { title: "教材 | 合格プランナー" };
 
@@ -35,31 +35,28 @@ export default async function MaterialsPage() {
 
   return (
     <div className="mx-auto max-w-2xl space-y-4">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="font-heading text-2xl font-semibold">教材</h1>
-          <p className="text-sm text-muted-foreground">
-            章をタップして進捗を更新(未着手→進行中→完了)
-          </p>
-        </div>
-        <Button asChild variant="outline" size="sm">
-          <Link href="/ai">
-            <Sparkles className="size-4" /> AIで追加
-          </Link>
-        </Button>
+      <div>
+        <h1 className="font-heading text-2xl font-semibold">教材</h1>
+        <p className="text-sm text-muted-foreground">
+          検索して追加すると、教科の分類と章立ては AI が自動で行います
+        </p>
       </div>
 
+      <MaterialSearch />
+
       {materialsRes.data.length === 0 ? (
-        <div className="space-y-3 rounded-2xl border border-dashed p-8 text-center">
+        <div className="space-y-2 rounded-2xl border border-dashed p-8 text-center">
           <p className="text-sm text-muted-foreground">
-            まだ教材がありません。AI に「〇〇(教材名)を追加して」と話すと、
-            ネットで目次を調べて章ごとに分割してくれます。
+            まだ教材がありません。上の検索窓に教材名を入れると、
+            Web から目次を調べて教科ごとに整理します。
           </p>
-          <Button asChild>
-            <Link href="/ai">
-              <Sparkles className="size-4" /> AI に教材を追加してもらう
-            </Link>
-          </Button>
+          <p className="text-xs text-muted-foreground">
+            どの教材を使うか迷っている場合は{" "}
+            <Link href="/ai" className="text-primary underline">
+              <Sparkles className="inline size-3.5" /> AI相談
+            </Link>{" "}
+            でおすすめを聞けます
+          </p>
         </div>
       ) : (
         <MaterialList

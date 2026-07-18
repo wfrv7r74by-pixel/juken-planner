@@ -14,16 +14,12 @@ import type {
 } from "@/types/database";
 import type { ActionResult } from "@/lib/actions/masters";
 
+import {
+  ensureSubject,
+  insertMaterialWithSections,
+} from "@/lib/data/materials";
+
 const WEEKDAY_LABELS = ["日", "月", "火", "水", "木", "金", "土"];
-const SUBJECT_COLORS = [
-  "#3b82f6",
-  "#8b5cf6",
-  "#ec4899",
-  "#22c55e",
-  "#f97316",
-  "#06b6d4",
-  "#eab308",
-];
 
 async function getUser() {
   const supabase = await createClient();
@@ -281,36 +277,6 @@ export async function clearChat(): Promise<ActionResult> {
   return { error: null };
 }
 
-async function ensureSubject(
-  supabase: Awaited<ReturnType<typeof createClient>>,
-  userId: string,
-  name: string,
-): Promise<string | null> {
-  const { data: existing } = await supabase
-    .from("subjects")
-    .select("id")
-    .eq("user_id", userId)
-    .eq("name", name)
-    .maybeSingle();
-  if (existing) return existing.id;
-
-  const { count } = await supabase
-    .from("subjects")
-    .select("id", { count: "exact", head: true })
-    .eq("user_id", userId);
-  const { data: inserted, error } = await supabase
-    .from("subjects")
-    .insert({
-      user_id: userId,
-      name,
-      color: SUBJECT_COLORS[(count ?? 0) % SUBJECT_COLORS.length],
-    })
-    .select("id")
-    .single();
-  if (error || !inserted) return null;
-  return inserted.id;
-}
-
 /** AI の提案をデータに反映する */
 export async function applyProposal(
   messageId: string,
@@ -385,34 +351,12 @@ export async function applyProposal(
     if (error) return { error: "ルーティンの登録に失敗しました。" };
   } else if (proposal.type === "propose_material") {
     const data = proposal.data as MaterialProposal;
-    const subjectId = await ensureSubject(supabase, user.id, data.subject);
-    if (!subjectId) return { error: "科目の作成に失敗しました。" };
-    const { data: material, error: materialError } = await supabase
-      .from("materials")
-      .insert({
-        user_id: user.id,
-        subject_id: subjectId,
-        title: data.title,
-        total_units: Math.max(1, data.sections.length),
-        unit_label: "章",
-        minutes_per_unit: 60,
-      })
-      .select("id")
-      .single();
-    if (materialError || !material) {
-      return { error: "教材の登録に失敗しました。" };
-    }
-    const { error: sectionsError } = await supabase
-      .from("material_sections")
-      .insert(
-        data.sections.map((title, i) => ({
-          user_id: user.id,
-          material_id: material.id,
-          title,
-          sort_order: i,
-        })),
-      );
-    if (sectionsError) return { error: "章の登録に失敗しました。" };
+    const insertError = await insertMaterialWithSections(supabase, user.id, {
+      subject: data.subject,
+      title: data.title,
+      sections: data.sections,
+    });
+    if (insertError) return { error: insertError };
   } else if (proposal.type === "propose_milestones") {
     const data = proposal.data as MilestonesProposal;
     if (data.milestones.some((m) => m.is_target)) {
