@@ -37,7 +37,7 @@ export default async function PlanPage() {
   return (
     <div className="mx-auto max-w-2xl space-y-5">
       <div>
-        <h1 className="text-2xl font-black">計画</h1>
+        <h1 className="font-heading text-2xl font-semibold">計画</h1>
         <p className="text-sm text-muted-foreground">
           試験日程とフェーズ戦略の管理
         </p>

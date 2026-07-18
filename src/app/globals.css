@@ -9,7 +9,7 @@
   --color-foreground: var(--foreground);
   --font-sans: var(--font-geist-sans), var(--font-noto-sans-jp), sans-serif;
   --font-mono: var(--font-geist-mono);
-  --font-heading: var(--font-sans);
+  --font-heading: var(--font-noto-serif-jp), "Hiragino Mincho ProN", serif;
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -96,30 +96,30 @@
 }
 
 .dark {
-  --background: #070b14;
-  --foreground: #e7ecf5;
-  --card: #0e1424;
-  --card-foreground: #e7ecf5;
-  --popover: #131a2e;
-  --popover-foreground: #e7ecf5;
-  --primary: #3b82f6;
-  --primary-foreground: #ffffff;
-  --phase-basic: #3b82f6;
-  --phase-advance: #8b5cf6;
-  --phase-final: #f97316;
-  --success: #22c55e;
-  --success-foreground: #052e16;
-  --milestone: #f59e0b;
-  --secondary: #182238;
-  --secondary-foreground: #cbd5e1;
-  --muted: #141b2e;
-  --muted-foreground: #7c8aa5;
-  --accent: #1a2440;
-  --accent-foreground: #dbe4f3;
-  --destructive: #f87171;
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 14%);
-  --ring: #3b82f6;
+  --background: #0f0e0c;
+  --foreground: #ece8de;
+  --card: #171613;
+  --card-foreground: #ece8de;
+  --popover: #1c1a16;
+  --popover-foreground: #ece8de;
+  --primary: #c9a86a;
+  --primary-foreground: #17140f;
+  --phase-basic: #7f97ad;
+  --phase-advance: #9a8fb5;
+  --phase-final: #c08a5f;
+  --success: #93ac89;
+  --success-foreground: #141710;
+  --milestone: #c9a86a;
+  --secondary: #211f1a;
+  --secondary-foreground: #d8d3c8;
+  --muted: #1b1916;
+  --muted-foreground: #a09a8c;
+  --accent: #26231d;
+  --accent-foreground: #e6e1d5;
+  --destructive: #c47b6a;
+  --border: oklch(1 0 0 / 8%);
+  --input: oklch(1 0 0 / 12%);
+  --ring: #c9a86a;
   --chart-1: oklch(0.87 0 0);
   --chart-2: oklch(0.556 0 0);
   --chart-3: oklch(0.439 0 0);
@@ -133,21 +133,6 @@
   --sidebar-accent-foreground: oklch(0.985 0 0);
   --sidebar-border: oklch(1 0 0 / 10%);
   --sidebar-ring: oklch(0.556 0 0);
-}
-
-@keyframes spotlight {
-  0% {
-    opacity: 0;
-    transform: translate(-72%, -62%) scale(0.5);
-  }
-  100% {
-    opacity: 1;
-    transform: translate(-50%, -40%) scale(1);
-  }
-}
-
-.animate-spotlight {
-  animation: spotlight 2s ease 0.4s 1 forwards;
 }
 
 @layer base {

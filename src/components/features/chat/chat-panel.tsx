@@ -67,7 +67,7 @@ export function ChatPanel({ messages }: { messages: ChatMessage[] }) {
     <div className="mx-auto flex h-[calc(100svh-8rem)] max-w-2xl flex-col md:h-[calc(100svh-7rem)]">
       <div className="flex items-center justify-between pb-3">
         <div>
-          <h1 className="flex items-center gap-2 text-xl font-black">
+          <h1 className="font-heading flex items-center gap-2 text-xl font-semibold">
             <Sparkles className="size-5 text-primary" /> AI相談
           </h1>
           <p className="text-xs text-muted-foreground">

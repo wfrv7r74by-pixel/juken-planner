@@ -162,7 +162,7 @@ export function DashboardTabs({
           </div>
 
           <div className="flex items-baseline justify-between">
-            <h2 className="text-2xl font-black text-primary">
+            <h2 className="font-heading text-2xl font-semibold text-primary">
               {WEEKDAY_LABELS[weekday]}曜
               {weekday === todayWeekday && (
                 <span className="ml-2 text-sm font-bold text-muted-foreground">

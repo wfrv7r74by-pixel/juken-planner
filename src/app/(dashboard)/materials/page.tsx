@@ -37,7 +37,7 @@ export default async function MaterialsPage() {
     <div className="mx-auto max-w-2xl space-y-4">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-black">教材</h1>
+          <h1 className="font-heading text-2xl font-semibold">教材</h1>
           <p className="text-sm text-muted-foreground">
             章をタップして進捗を更新(未着手→進行中→完了)
           </p>
