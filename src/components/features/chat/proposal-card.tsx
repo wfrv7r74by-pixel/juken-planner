@@ -85,6 +85,16 @@ function ProposalBody({ proposal }: { proposal: Proposal }) {
             {data.subject}
           </span>
         </p>
+        {data.fit_score && (
+          <p className="text-xs text-primary">
+            目標適合度 {"★".repeat(Math.min(5, data.fit_score))}
+            {data.fit_comment && (
+              <span className="ml-1 text-muted-foreground">
+                — {data.fit_comment}
+              </span>
+            )}
+          </p>
+        )}
         <p className="text-xs text-muted-foreground">
           全{data.sections.length}章: {data.sections.slice(0, 4).join(" / ")}
           {data.sections.length > 4 && ` …ほか${data.sections.length - 4}章`}

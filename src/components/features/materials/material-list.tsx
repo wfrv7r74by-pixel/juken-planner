@@ -79,7 +79,17 @@ export function MaterialList({
                 </span>
               )}
               <span className="min-w-0 flex-1">
-                <span className="block truncate font-bold">{material.title}</span>
+                <span className="block truncate font-bold">
+                  {material.title}
+                  {material.fit_score && (
+                    <span className="ml-2 text-xs font-medium text-primary">
+                      適合 {"★".repeat(material.fit_score)}
+                      <span className="text-muted-foreground/60">
+                        {"★".repeat(5 - material.fit_score)}
+                      </span>
+                    </span>
+                  )}
+                </span>
                 <span className="mt-1 flex items-center gap-2">
                   <span className="h-1.5 w-28 overflow-hidden rounded-full bg-muted">
                     <span
@@ -102,6 +112,12 @@ export function MaterialList({
 
             {isOpen && (
               <div className="border-t px-4 pb-4">
+                {material.fit_comment && (
+                  <p className="mt-3 rounded-xl bg-secondary p-3 text-xs text-muted-foreground">
+                    <span className="font-bold text-primary">AI評価: </span>
+                    {material.fit_comment}
+                  </p>
+                )}
                 <ul className="divide-y divide-border/50">
                   {materialSections.map((section) => {
                     const meta = STATUS_META[section.status];

@@ -32,8 +32,19 @@ export async function searchMaterial(query: string): Promise<SearchState> {
     };
   }
 
+  const { data: target } = await supabase
+    .from("milestones")
+    .select("title, date")
+    .eq("user_id", user.id)
+    .eq("is_target", true)
+    .limit(1)
+    .maybeSingle();
+  const goal = target
+    ? `${target.title}(${target.date})合格`
+    : "未設定(一般的な大学受験を想定)";
+
   try {
-    const result = await lookupMaterial(trimmed);
+    const result = await lookupMaterial(trimmed, goal);
     if (!result) {
       return {
         error: "教材を特定できませんでした。名称を変えて試してください。",
@@ -56,6 +67,8 @@ export async function confirmMaterial(data: {
   subject: string;
   title: string;
   sections: string[];
+  fit_score?: number;
+  fit_comment?: string;
 }): Promise<{ error: string | null }> {
   const supabase = await createClient();
   const {
@@ -75,10 +88,22 @@ export async function confirmMaterial(data: {
     return { error: "教科と教材名が必要です。" };
   }
 
+  const fitScore =
+    Number.isInteger(data.fit_score) &&
+    data.fit_score! >= 1 &&
+    data.fit_score! <= 5
+      ? data.fit_score
+      : undefined;
+
   const error = await insertMaterialWithSections(supabase, user.id, {
     subject,
     title,
     sections,
+    fit_score: fitScore,
+    fit_comment:
+      typeof data.fit_comment === "string"
+        ? data.fit_comment.slice(0, 300)
+        : undefined,
   });
   if (error) return { error };
 

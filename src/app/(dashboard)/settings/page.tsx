@@ -82,8 +82,8 @@ export default async function SettingsPage() {
           <p>合格プランナー v3 — AI と一緒に作る受験ダッシュボード</p>
           <p>
             試験日程・フェーズの編集は{" "}
-            <Link href="/plan" className="text-primary underline">
-              計画ページ
+            <Link href="/ai" className="text-primary underline">
+              AI相談の「計画データ」タブ
             </Link>
             、科目・教材は{" "}
             <Link href="/materials" className="text-primary underline">

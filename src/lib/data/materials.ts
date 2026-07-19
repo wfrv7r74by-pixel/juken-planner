@@ -51,7 +51,13 @@ export async function ensureSubject(
 export async function insertMaterialWithSections(
   supabase: Supa,
   userId: string,
-  data: { subject: string; title: string; sections: string[] },
+  data: {
+    subject: string;
+    title: string;
+    sections: string[];
+    fit_score?: number;
+    fit_comment?: string;
+  },
 ): Promise<string | null> {
   const subjectId = await ensureSubject(supabase, userId, data.subject);
   if (!subjectId) return "科目の作成に失敗しました。";
@@ -65,6 +71,8 @@ export async function insertMaterialWithSections(
       total_units: Math.max(1, data.sections.length),
       unit_label: "章",
       minutes_per_unit: 60,
+      fit_score: data.fit_score ?? null,
+      fit_comment: data.fit_comment?.trim() || null,
     })
     .select("id")
     .single();

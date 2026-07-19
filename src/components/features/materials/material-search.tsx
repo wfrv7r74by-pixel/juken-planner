@@ -38,6 +38,8 @@ export function MaterialSearch() {
         subject: subject.trim() || result.subject,
         title: result.title,
         sections: result.sections,
+        fit_score: result.fit_score,
+        fit_comment: result.fit_comment,
       });
       if (res.error) {
         toast.error(res.error);
@@ -108,6 +110,22 @@ export function MaterialSearch() {
               aria-label="教科"
             />
           </div>
+
+          {result.fit_score && (
+            <div className="rounded-xl bg-secondary p-3">
+              <p className="text-xs font-bold text-primary">
+                目標適合度 {"★".repeat(result.fit_score)}
+                <span className="text-muted-foreground">
+                  {"★".repeat(5 - result.fit_score)}
+                </span>
+              </p>
+              {result.fit_comment && (
+                <p className="mt-1 text-xs text-muted-foreground">
+                  {result.fit_comment}
+                </p>
+              )}
+            </div>
+          )}
 
           <div className="max-h-44 overflow-y-auto rounded-xl border p-3">
             <p className="mb-1.5 text-xs text-muted-foreground">

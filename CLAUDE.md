@@ -77,6 +77,16 @@ supabase/migrations/   # マイグレーション SQL
 - タスク完了時は `study_logs` に学習時間を自動記録(`task_id` で紐付け、
   完了取り消しで削除)
 
+## ロードマップ(ユーザー意向)
+
+- **公開時のAI課金**: 公開アプリでは「課金ユーザーのみ AI 機能が使える」形にする。
+  API キーはサーバー側に隔離済みなので、Server Actions の入口
+  (sendChatMessage / requestAiProposal / searchMaterial)に
+  ユーザーごとの利用権チェック(サブスク or クォータ)を足す設計とする。
+- **教材ECサイト連携(将来)**: 教材ECサイトを別途作り連携予定。
+  教材データ(title/subject/sections/fit_score)は外部マスタ化を見据えて
+  lib/data/materials.ts に集約してある。
+
 ## 環境変数
 
 `.env.example` を参照。`.env.local` に Supabase URL / anon キーを設定。

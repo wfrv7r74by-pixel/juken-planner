@@ -99,8 +99,16 @@ const PROPOSAL_TOOLS: Anthropic.Messages.ToolUnion[] = [
           items: { type: "string" },
           description: "章・項目のリスト(取り組む順)",
         },
+        fit_score: {
+          type: "integer",
+          description: "ユーザーの目標への適合度 1〜5(5=最適)",
+        },
+        fit_comment: {
+          type: "string",
+          description: "適合度の理由・使い方の注意(50字程度)",
+        },
       },
-      required: ["subject", "title", "sections"],
+      required: ["subject", "title", "sections", "fit_score", "fit_comment"],
     },
   },
   {

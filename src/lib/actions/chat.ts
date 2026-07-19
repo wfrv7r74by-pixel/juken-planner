@@ -355,6 +355,8 @@ export async function applyProposal(
       subject: data.subject,
       title: data.title,
       sections: data.sections,
+      fit_score: data.fit_score,
+      fit_comment: data.fit_comment,
     });
     if (insertError) return { error: insertError };
   } else if (proposal.type === "propose_milestones") {

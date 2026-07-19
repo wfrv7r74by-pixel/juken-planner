@@ -71,6 +71,9 @@ export type Material = {
   minutes_per_unit: number;
   phase: Phase;
   priority: number;
+  /** 目標適合度(AI 評価, 1〜5) */
+  fit_score: number | null;
+  fit_comment: string | null;
   created_at: string;
 };
 
@@ -138,6 +141,8 @@ export type MaterialProposal = {
   subject: string;
   title: string;
   sections: string[];
+  fit_score?: number;
+  fit_comment?: string;
 };
 
 export type MilestonesProposal = {
