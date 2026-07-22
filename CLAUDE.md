@@ -77,15 +77,24 @@ supabase/migrations/   # マイグレーション SQL
 - タスク完了時は `study_logs` に学習時間を自動記録(`task_id` で紐付け、
   完了取り消しで削除)
 
-## ロードマップ(ユーザー意向)
+## AI モデルのティア分け
 
-- **公開時のAI課金**: 公開アプリでは「課金ユーザーのみ AI 機能が使える」形にする。
-  API キーはサーバー側に隔離済みなので、Server Actions の入口
-  (sendChatMessage / requestAiProposal / searchMaterial)に
-  ユーザーごとの利用権チェック(サブスク or クォータ)を足す設計とする。
-- **教材ECサイト連携(将来)**: 教材ECサイトを別途作り連携予定。
-  教材データ(title/subject/sections/fit_score)は外部マスタ化を見据えて
-  lib/data/materials.ts に集約してある。
+`src/lib/ai/models.ts` で用途別にモデルを一元管理する。差し替えはこのファイルのみ。
+- **strategy**(AI相談): `claude-opus-4-8` + adaptive thinking + web検索(dynamic filtering)
+- **utility**(教材検索・分類): `claude-haiku-4-5`(Opus の約1/5コスト)+ 基本web検索
+- 相談は STABLE_SYSTEM をキャッシュ、変動部(現状データ)は breakpoint の後ろに置く。
+
+## 拡張の継ぎ目(ロードマップ)
+
+後から全体構造を変えずに機能追加できるよう、以下の seam を用意済み。
+- **AI課金ゲート**: `src/lib/ai/gate.ts` の `checkAiAccess()` が全AI呼び出しの唯一の関所。
+  公開・課金化時はこの関数にサブスク/クォータ判定を足すだけ(各Actionは変更不要)。
+- **モデル/プロバイダ差し替え**: `src/lib/ai/models.ts` のティア設定を変更するだけ。
+  将来スケール時に一部を他社の格安モデルに寄せる場合もここで吸収。
+- **教材ECサイト連携**: 教材登録は `src/lib/data/materials.ts` に集約済み。
+  外部マスタ(EC)差し替えを見据えた形。
+- **解答採点システム**: `src/lib/grading/`(開発エリア・スタブ)。型と受け皿のみ用意。
+  実装時は models.ts のティアと gate.ts を通し、UI は `app/(dashboard)/grading/` に新設。
 
 ## 環境変数
 

@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { format } from "date-fns";
 import { createClient } from "@/lib/supabase/server";
 import { runChat, type AiContext } from "@/lib/ai/chat";
+import { checkAiAccess } from "@/lib/ai/gate";
 import type {
   ChatMetadata,
   MaterialProposal,
@@ -142,12 +143,8 @@ export async function sendChatMessage(content: string): Promise<ActionResult> {
   const { supabase, user } = await getUser();
   if (!user) return { error: "ログインが必要です。" };
 
-  if (!process.env.ANTHROPIC_API_KEY) {
-    return {
-      error:
-        "AI 機能が未設定です。.env.local に ANTHROPIC_API_KEY を設定してサーバーを再起動してください。",
-    };
-  }
+  const access = await checkAiAccess(supabase, user.id);
+  if (!access.allowed) return { error: access.reason };
 
   const [profileRes, historyRes] = await Promise.all([
     supabase.from("profiles").select("display_name").eq("id", user.id).single(),
@@ -206,12 +203,8 @@ export async function requestAiProposal(): Promise<ActionResult> {
   const { supabase, user } = await getUser();
   if (!user) return { error: "ログインが必要です。" };
 
-  if (!process.env.ANTHROPIC_API_KEY) {
-    return {
-      error:
-        "AI 機能が未設定です。.env.local に ANTHROPIC_API_KEY を設定してサーバーを再起動してください。",
-    };
-  }
+  const access = await checkAiAccess(supabase, user.id);
+  if (!access.allowed) return { error: access.reason };
 
   const [profileRes, historyRes] = await Promise.all([
     supabase.from("profiles").select("display_name").eq("id", user.id).single(),

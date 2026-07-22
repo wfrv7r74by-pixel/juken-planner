@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { lookupMaterial, type MaterialLookup } from "@/lib/ai/material-search";
 import { insertMaterialWithSections } from "@/lib/data/materials";
+import { checkAiAccess } from "@/lib/ai/gate";
 
 export interface SearchState {
   error: string | null;
@@ -24,13 +25,8 @@ export async function searchMaterial(query: string): Promise<SearchState> {
   } = await supabase.auth.getUser();
   if (!user) return { error: "ログインが必要です。", result: null };
 
-  if (!process.env.ANTHROPIC_API_KEY) {
-    return {
-      error:
-        "AI 機能が未設定です。設定ページから API キーの状態を確認してください。",
-      result: null,
-    };
-  }
+  const access = await checkAiAccess(supabase, user.id);
+  if (!access.allowed) return { error: access.reason, result: null };
 
   const { data: target } = await supabase
     .from("milestones")

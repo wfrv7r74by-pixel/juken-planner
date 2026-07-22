@@ -1,6 +1,8 @@
 // 教材検索: 教材名から Web 検索で書誌情報を特定し、教科を自動分類して章立てを返す
+// 軽い定型作業なので utility ティア(Haiku 4.5, Opus の約1/5コスト)を使う
 import Anthropic from "@anthropic-ai/sdk";
 import type { MaterialProposal } from "@/types/database";
+import { tierParams, webSearchTool } from "@/lib/ai/models";
 
 const SYSTEM = `あなたは日本の受験教材のデータベース担当。ユーザーが入力した教材名(あいまい・略称でもよい)から実際の教材を特定する。
 
@@ -29,7 +31,7 @@ export async function lookupMaterial(
   const client = new Anthropic();
 
   const tools: Anthropic.Messages.ToolUnion[] = [
-    { type: "web_search_20260209", name: "web_search", max_uses: 3 },
+    webSearchTool("utility", 3),
     {
       name: "register_material",
       description: "特定した教材の情報を登録する(必ず1回呼ぶこと)",
@@ -65,13 +67,15 @@ export async function lookupMaterial(
     { role: "user", content: `教材名: ${query}\nユーザーの目標: ${goal}` },
   ];
 
+  const system: Anthropic.Messages.TextBlockParam[] = [
+    { type: "text", text: SYSTEM, cache_control: { type: "ephemeral" } },
+  ];
+
   for (let i = 0; i < 5; i++) {
     const response = await client.messages.create({
-      model: "claude-opus-4-8",
+      ...tierParams("utility"),
       max_tokens: 4096,
-      thinking: { type: "adaptive" },
-      output_config: { effort: "medium" },
-      system: SYSTEM,
+      system,
       tools,
       messages,
     });

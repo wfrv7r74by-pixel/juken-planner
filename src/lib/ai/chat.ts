@@ -4,6 +4,7 @@
 // - 提案系ツール: 実行せず「提案カード」として UI に返し、ユーザーが反映を承認する
 import Anthropic from "@anthropic-ai/sdk";
 import type { Proposal } from "@/types/database";
+import { tierParams, webSearchTool } from "@/lib/ai/models";
 
 export interface AiContext {
   today: string;
@@ -147,10 +148,24 @@ const PROPOSAL_TOOL_NAMES = new Set([
   "propose_milestones",
 ]);
 
-function buildSystemPrompt(ctx: AiContext): string {
-  return `あなたは受験戦略コーチ。ユーザー(${ctx.displayName || "受験生"})と相談しながら、受験までの計画を一緒に作る。
+// プロンプトキャッシュのため、システムプロンプトを
+// 「安定部(毎回同じ=キャッシュ対象)」と「変動部(ユーザーの現状データ)」に分ける。
+const STABLE_SYSTEM = `あなたは受験戦略コーチ。ユーザーと相談しながら、受験までの計画を一緒に作る。
 
-## 現在の状況(アプリのデータ)
+## 行動指針
+- あなたは一歩前に出るコーチ。質問攻めにせず、**まず現状データから具体的な叩き台を提案し、対話で磨く**。情報が足りなくても妥当な仮定を置いて提案し、仮定は一言添えて、ユーザーの反応で調整する。
+- 確認の質問は1ターンに最大1つまで。「どうしますか?」より「こうしませんか?」。
+- 現状データに穴(フェーズ未設定、ルーティンが空、模試予定なし等)があれば、聞かれなくても指摘して提案する。
+- 具体的な変更はすべて propose_* ツールで提案する(あなたは直接データを書き換えられない。ユーザーがカードの「反映」ボタンで承認する)。
+- 教材を提案するときは fit_score/fit_comment でユーザーの目標への適合度も評価する。
+- 市販教材の章立てを提案するときは、必ず web_search で実際の目次を確認する。見つからなければ一般的な構成で提案し、その旨を伝える。
+- 模試日程など日付が不確かな情報も web_search で確認してよい。
+- 提案ツールを使ったら、本文ではその狙いを2〜3文で簡潔に説明する(内容の繰り返しは不要。カードに表示される)。
+- 返答は簡潔な日本語で。長い箇条書きの羅列より、要点を絞った短い文章。`;
+
+function buildContextBlock(ctx: AiContext): string {
+  return `## 現在の状況(アプリのデータ)
+- ユーザー: ${ctx.displayName || "受験生"}
 - 今日: ${ctx.today}
 - マイルストーン: ${ctx.milestones.length ? ctx.milestones.map((m) => `${m.title}(${m.date}${m.is_target ? "・本命" : ""})`).join(", ") : "未設定"}
 - フェーズ: ${ctx.phases.length ? ctx.phases.map((p) => `${p.name}(${p.start_date}〜${p.end_date})`).join(", ") : "未設定"}
@@ -158,17 +173,7 @@ function buildSystemPrompt(ctx: AiContext): string {
 - 教材: ${ctx.materials.length ? ctx.materials.map((m) => `${m.title}(${m.subject}, ${m.done}/${m.total}章)`).join(", ") : "未登録"}
 - ルーティン: ${ctx.routineSummary || "未設定"}
 - 直近の学習: ${ctx.recentStudy || "記録なし"}
-- 直近の振り返り: ${ctx.recentNotes.length ? ctx.recentNotes.map((n) => `${n.date}: 良${n.good ?? "-"}/課題${n.issue ?? "-"}`).join(" | ") : "なし"}
-
-## 行動指針
-- あなたは一歩前に出るコーチ。質問攻めにせず、**まず現状データから具体的な叩き台を提案し、対話で磨く**。情報が足りなくても妥当な仮定を置いて提案し、仮定は一言添えて、ユーザーの反応で調整する。
-- 確認の質問は1ターンに最大1つまで。「どうしますか?」より「こうしませんか?」。
-- 現状データに穴(フェーズ未設定、ルーティンが空、模試予定なし等)があれば、聞かれなくても指摘して提案する。
-- 具体的な変更はすべて propose_* ツールで提案する(あなたは直接データを書き換えられない。ユーザーがカードの「反映」ボタンで承認する)。
-- 市販教材の章立てを提案するときは、必ず web_search で実際の目次を確認する。見つからなければ一般的な構成で提案し、その旨を伝える。
-- 模試日程など日付が不確かな情報も web_search で確認してよい。
-- 提案ツールを使ったら、本文ではその狙いを2〜3文で簡潔に説明する(内容の繰り返しは不要。カードに表示される)。
-- 返答は簡潔な日本語で。長い箇条書きの羅列より、要点を絞った短い文章。`;
+- 直近の振り返り: ${ctx.recentNotes.length ? ctx.recentNotes.map((n) => `${n.date}: 良${n.good ?? "-"}/課題${n.issue ?? "-"}`).join(" | ") : "なし"}`;
 }
 
 /**
@@ -181,8 +186,18 @@ export async function runChat(
   const client = new Anthropic();
 
   const tools: Anthropic.Messages.ToolUnion[] = [
-    { type: "web_search_20260209", name: "web_search", max_uses: 4 },
+    webSearchTool("strategy", 4),
     ...PROPOSAL_TOOLS,
+  ];
+
+  // 安定部にキャッシュbreakpointを置き、変動部(現状データ)はその後ろに置く
+  const system: Anthropic.Messages.TextBlockParam[] = [
+    {
+      type: "text",
+      text: STABLE_SYSTEM,
+      cache_control: { type: "ephemeral" },
+    },
+    { type: "text", text: buildContextBlock(ctx) },
   ];
 
   let messages: Anthropic.MessageParam[] = history.map((m) => ({
@@ -196,11 +211,9 @@ export async function runChat(
   // 提案ツール(クライアント側ツール)と pause_turn を処理するループ
   for (let iteration = 0; iteration < 6; iteration++) {
     const response = await client.messages.create({
-      model: "claude-opus-4-8",
+      ...tierParams("strategy"),
       max_tokens: 8192,
-      thinking: { type: "adaptive" },
-      output_config: { effort: "medium" },
-      system: buildSystemPrompt(ctx),
+      system,
       tools,
       messages,
     });
