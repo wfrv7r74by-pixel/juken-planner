@@ -8,6 +8,7 @@ import {
   DashboardTabs,
   type SubjectMinutes,
 } from "@/components/features/dashboard/dashboard-tabs";
+import { ReviewWidget } from "@/components/features/dashboard/review-widget";
 import { Button } from "@/components/ui/button";
 import { NumberTicker } from "@/components/ui/aceternity/number-ticker";
 
@@ -35,6 +36,8 @@ export default async function DashboardPage() {
     logs30Res,
     notesRes,
     profileRes,
+    reviewRes,
+    reviewDoneRes,
   ] = await Promise.all([
     supabase
       .from("milestones")
@@ -81,6 +84,19 @@ export default async function DashboardPage() {
       .order("date", { ascending: false })
       .limit(30),
     supabase.from("profiles").select("display_name").eq("id", user.id).single(),
+    supabase
+      .from("review_items")
+      .select("*", { count: "exact" })
+      .eq("user_id", user.id)
+      .eq("status", "todo")
+      .order("created_at", { ascending: false })
+      .limit(6),
+    supabase
+      .from("review_items")
+      .select("id", { count: "exact", head: true })
+      .eq("user_id", user.id)
+      .eq("status", "done")
+      .gte("done_at", `${from30}T00:00:00`),
   ]);
 
   const anyError =
@@ -159,6 +175,10 @@ export default async function DashboardPage() {
 
   const todayNote =
     notesRes.data.find((n) => n.date === todayStr) ?? null;
+
+  const reviewItems = reviewRes.error ? [] : (reviewRes.data ?? []);
+  const reviewTodoCount = reviewRes.error ? 0 : (reviewRes.count ?? reviewItems.length);
+  const reviewDone30 = reviewDoneRes.error ? 0 : (reviewDoneRes.count ?? 0);
 
   const isEmpty =
     !target && phases.length === 0 && blocksRes.data.length === 0;
@@ -283,6 +303,9 @@ export default async function DashboardPage() {
             </div>
           </div>
 
+          {/* 復習リスト(採点から溜まった要復習項目) */}
+          <ReviewWidget items={reviewItems} totalTodo={reviewTodoCount} />
+
           {/* タブ(予定/振返/履歴/分析) */}
           <DashboardTabs
             todayStr={todayStr}
@@ -295,6 +318,7 @@ export default async function DashboardPage() {
             minutesByDate={[...minutesByDate.entries()]}
             subjectMinutes={subjectMinutes}
             totalMinutes30={totalMinutes30}
+            reviewDone30={reviewDone30}
             displayName={profileRes.data?.display_name ?? ""}
           />
         </>

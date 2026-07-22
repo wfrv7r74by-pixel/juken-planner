@@ -66,6 +66,7 @@ export function DashboardTabs({
   minutesByDate,
   subjectMinutes,
   totalMinutes30,
+  reviewDone30,
   displayName,
 }: {
   todayStr: string;
@@ -78,6 +79,7 @@ export function DashboardTabs({
   minutesByDate: [string, number][];
   subjectMinutes: SubjectMinutes[];
   totalMinutes30: number;
+  reviewDone30: number;
   displayName: string;
 }) {
   const [tab, setTab] = useState<TabId>("schedule");
@@ -470,6 +472,24 @@ export function DashboardTabs({
       {/* ===== 分析 ===== */}
       {tab === "analytics" && (
         <div className="space-y-4">
+          <div className="grid grid-cols-2 gap-3">
+            <div className="rounded-2xl border bg-card p-4">
+              <p className="text-xs text-muted-foreground">学習時間(30日)</p>
+              <p className="font-heading mt-1 text-2xl font-semibold">
+                {formatHours(totalMinutes30)}
+              </p>
+            </div>
+            <div className="rounded-2xl border bg-card p-4">
+              <p className="text-xs text-muted-foreground">復習した項目(30日)</p>
+              <p className="font-heading mt-1 text-2xl font-semibold text-primary">
+                {reviewDone30}
+                <span className="ml-1 text-sm font-normal text-muted-foreground">
+                  件
+                </span>
+              </p>
+            </div>
+          </div>
+
           <div className="rounded-2xl border bg-card p-4">
             <p className="text-sm font-bold">日別の学習時間(直近14日)</p>
             <div className="mt-3 flex h-36 items-end gap-1">
