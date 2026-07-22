@@ -178,7 +178,43 @@ export type GradingRecord = {
 };
 
 export type ReviewStatus = "todo" | "done";
-export type ReviewSource = "manual" | "grading";
+export type ReviewSource = "manual" | "grading" | "mock";
+
+/** 模試の種別: 共通テスト模試 / 冠模試(大学別) / 学力測定模試 */
+export type MockKind = "common" | "university" | "ability";
+
+export type MockWeakness = {
+  subject: string;
+  point: string;
+  advice: string;
+};
+
+export type MockExam = {
+  id: string;
+  user_id: string;
+  kind: MockKind;
+  name: string;
+  provider: string | null;
+  university: string | null;
+  date: string;
+  overall_deviation: number | null;
+  weaknesses: MockWeakness[] | null;
+  image_path: string | null;
+  memo: string | null;
+  created_at: string;
+};
+
+export type MockSubject = {
+  id: string;
+  user_id: string;
+  mock_id: string;
+  subject: string;
+  score: number | null;
+  max_score: number | null;
+  deviation: number | null;
+  sort_order: number;
+  created_at: string;
+};
 
 export type ReviewItem = {
   id: string;
@@ -282,6 +318,20 @@ export type Database = {
         Insert: Partial<ReviewItem> &
           Pick<ReviewItem, "user_id" | "topic">;
         Update: Partial<ReviewItem>;
+        Relationships: [];
+      };
+      mock_exams: {
+        Row: MockExam;
+        Insert: Partial<MockExam> &
+          Pick<MockExam, "user_id" | "kind" | "name" | "date">;
+        Update: Partial<MockExam>;
+        Relationships: [];
+      };
+      mock_subjects: {
+        Row: MockSubject;
+        Insert: Partial<MockSubject> &
+          Pick<MockSubject, "user_id" | "mock_id" | "subject">;
+        Update: Partial<MockSubject>;
         Relationships: [];
       };
     };

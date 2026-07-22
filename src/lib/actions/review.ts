@@ -72,6 +72,33 @@ export async function addReviewItemsFromGrading(input: {
   return ok;
 }
 
+/** 模試の弱点を復習リストへ登録 */
+export async function addReviewItemsFromMock(input: {
+  items: { subject: string; topic: string; detail?: string }[];
+}): Promise<ActionResult> {
+  const { supabase, user } = await getUser();
+  if (!user) return { error: "ログインが必要です。" };
+
+  const items = (Array.isArray(input.items) ? input.items : [])
+    .filter((i) => i && String(i.topic).trim())
+    .slice(0, 20);
+  if (items.length === 0) return { error: "追加する項目がありません。" };
+
+  const { error } = await supabase.from("review_items").insert(
+    items.map((i) => ({
+      user_id: user.id,
+      subject: i.subject?.trim() || "other",
+      topic: String(i.topic).slice(0, 200),
+      detail: i.detail?.trim() || null,
+      source: "mock" as const,
+    })),
+  );
+  if (error) return { error: "復習リストへの追加に失敗しました。" };
+
+  revalidatePath("/grading");
+  return ok;
+}
+
 /** 復習項目の完了/未完了を切り替え */
 export async function toggleReviewItem(
   id: string,
