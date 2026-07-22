@@ -1,26 +1,28 @@
-# 解答採点システム(開発エリア)
+# 解答採点システム
 
-数学・英語・理科の解答を AI が採点する機能の開発用モジュール。
-**現状は未実装のスタブ**。本体を作り込むときに、既存アプリの構造を変えずに
-ここへ実装を足せるよう、インターフェースだけ先に切ってある。
+数学・英語・理科などの解答を AI が採点する機能。**v1 実装済み**(テキスト入力)。
 
-## 想定フロー
+## 採点方針(重要)
 
-1. ユーザーが問題(画像/テキスト)と自分の解答を入力
-2. `gradeAnswer()` が科目別の採点ロジック(将来は模範解答・ルーブリック参照)で採点
-3. 点数・部分点・添削コメント・次に復習すべき単元を返す
-4. 結果は `study_logs` や新設の `grading_results` テーブルに保存(未作成)
+- **採点基準は高校の履修範囲**(学習指導要領)。高校範囲を超える解法を要求して減点しない。
+- 背景に大学範囲の理論がある場合は `universityContext` に **+αの補足**として分離(採点には影響させない)。
+- 高校では習わないが難関大で頻出・有利な技能は `advancedSkills`(**注目ポイント**)にまとめる。
 
-## 実装時の接続点
+## 構成
 
-- AI 呼び出しは `src/lib/ai/models.ts` のティアを使う(採点は utility か専用ティアを追加)
-- 利用可否は `src/lib/ai/gate.ts` の `checkAiAccess` を通す(課金ゲートを自動で継承)
-- UI は `src/app/(dashboard)/grading/` に新設(まだ無い)
-- 科目マスタ・教材との連携は `src/lib/data/materials.ts` 経由
+- `types.ts` — 型(GradingRequest / GradingResult / 科目)
+- `index.ts` — `gradeAnswer()`。Opus 4.8(grading ティア)+ submit_grading ツールで構造化
+- `src/lib/actions/grading.ts` — Server Action(採点 + `grading_results` 保存)
+- `src/app/(dashboard)/grading/` — UI(入力フォーム・結果カード・履歴)
+- `supabase/migrations/0005_grading.sql` — 採点履歴テーブル
 
-## やること(未着手)
+## 接続点(既存構造を変えずに拡張)
 
-- [ ] `grading_results` テーブルの migration
-- [ ] 科目別採点プロンプト(数学=論証/計算過程、英語=英作文添削、理科=記述)
-- [ ] 画像入力(答案の写真)対応
-- [ ] `src/app/(dashboard)/grading/` の UI
+- モデル: `src/lib/ai/models.ts` の `grading` ティア(正確性優先で Opus + effort high)
+- 利用可否: `src/lib/ai/gate.ts` の `checkAiAccess`(課金ゲートを継承)
+
+## 今後(未着手)
+
+- [ ] 画像入力(答案の写真)対応 — Claude の vision で答案画像を読む
+- [ ] 採点結果を復習リスト・学習記録と連携
+- [ ] 科目別のより詳細な採点ルーブリック

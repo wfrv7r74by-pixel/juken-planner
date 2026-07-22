@@ -165,6 +165,17 @@ export type StudyLog = {
   created_at: string;
 };
 
+export type GradingRecord = {
+  id: string;
+  user_id: string;
+  subject: string;
+  question: string;
+  answer: string;
+  score: number;
+  result: import("@/lib/grading/types").GradingResult;
+  created_at: string;
+};
+
 /** supabase-js の createClient に渡す Database 型 */
 export type Database = {
   public: {
@@ -237,6 +248,16 @@ export type Database = {
         Insert: Partial<StudyLog> &
           Pick<StudyLog, "user_id" | "date" | "minutes">;
         Update: Partial<StudyLog>;
+        Relationships: [];
+      };
+      grading_results: {
+        Row: GradingRecord;
+        Insert: Partial<GradingRecord> &
+          Pick<
+            GradingRecord,
+            "user_id" | "subject" | "question" | "answer" | "score" | "result"
+          >;
+        Update: Partial<GradingRecord>;
         Relationships: [];
       };
     };

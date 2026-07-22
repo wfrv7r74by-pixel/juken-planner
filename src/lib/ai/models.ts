@@ -3,7 +3,7 @@
 // 将来モデルを差し替える・別プロバイダを足す場合もこのファイルだけ変更すればよい。
 import type Anthropic from "@anthropic-ai/sdk";
 
-export type AiTier = "strategy" | "utility";
+export type AiTier = "strategy" | "utility" | "grading";
 
 export interface TierConfig {
   model: string;
@@ -28,6 +28,13 @@ export const AI_TIERS: Record<AiTier, TierConfig> = {
     model: "claude-haiku-4-5",
     webSearchType: "web_search_20250305",
     adaptiveThinking: false,
+  },
+  // 解答採点: 誤採点は学習の害になるため正確性優先。Opus + 高 effort
+  grading: {
+    model: "claude-opus-4-8",
+    webSearchType: "web_search_20260209",
+    adaptiveThinking: true,
+    effort: "high",
   },
 };
 
