@@ -98,18 +98,33 @@ export async function gradeAnswer(
 ): Promise<GradingResult> {
   const client = new Anthropic();
 
-  const userContent = [
+  const textParts = [
     `科目: ${GRADING_SUBJECT_LABELS[request.subject]}`,
     `【問題】\n${request.question}`,
-    `【あなたの解答】\n${request.answer}`,
+    request.image
+      ? "【あなたの解答】以下の答案画像を読み取って採点してください。手書きの文字・式も正確に読むこと。"
+      : `【あなたの解答】\n${request.answer}`,
+    request.answer && request.image ? `【補足(テキスト)】\n${request.answer}` : "",
     request.rubric ? `【模範解答・配点(参考)】\n${request.rubric}` : "",
   ]
     .filter(Boolean)
     .join("\n\n");
 
-  const messages: Anthropic.MessageParam[] = [
-    { role: "user", content: userContent },
+  const content: Anthropic.ContentBlockParam[] = [
+    { type: "text", text: textParts },
   ];
+  if (request.image) {
+    content.push({
+      type: "image",
+      source: {
+        type: "base64",
+        media_type: request.image.mediaType,
+        data: request.image.base64,
+      },
+    });
+  }
+
+  const messages: Anthropic.MessageParam[] = [{ role: "user", content }];
 
   const response = await client.messages.create({
     ...tierParams("grading"),

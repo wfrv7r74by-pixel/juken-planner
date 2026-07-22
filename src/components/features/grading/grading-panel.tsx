@@ -1,16 +1,20 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useRef, useState, useTransition } from "react";
 import {
   BookMarked,
   GraduationCap,
+  ImagePlus,
   Lightbulb,
   Loader2,
   Sparkles,
   Trash2,
+  X,
 } from "lucide-react";
 import { toast } from "sonner";
 import { deleteGrading, submitGrading } from "@/lib/actions/grading";
+import { addReviewItemsFromGrading } from "@/lib/actions/review";
+import { createClient } from "@/lib/supabase/client";
 import {
   GRADING_SUBJECT_LABELS,
   type GradingResult,
@@ -37,7 +41,30 @@ function scoreColor(score: number): string {
   return "text-destructive";
 }
 
-function ResultCard({ result }: { result: GradingResult }) {
+function ResultCard({
+  result,
+  subject,
+}: {
+  result: GradingResult;
+  subject?: GradingSubject;
+}) {
+  const [added, setAdded] = useState(false);
+  const [pending, startTransition] = useTransition();
+
+  const onAddReview = () => {
+    startTransition(async () => {
+      const res = await addReviewItemsFromGrading({
+        subject: subject ?? "other",
+        topics: result.reviewTopics,
+      });
+      if (res.error) toast.error(res.error);
+      else {
+        setAdded(true);
+        toast.success("復習リストに追加しました");
+      }
+    });
+  };
+
   return (
     <div className="space-y-4 rounded-2xl border border-primary/40 bg-card p-5">
       <div className="flex items-center gap-4">
@@ -69,12 +96,33 @@ function ResultCard({ result }: { result: GradingResult }) {
       </div>
 
       {result.reviewTopics.length > 0 && (
-        <div className="flex items-start gap-2 rounded-xl bg-secondary p-3">
-          <BookMarked className="mt-0.5 size-4 shrink-0 text-phase-basic" />
-          <div>
-            <p className="text-xs font-bold text-phase-basic">復習すべき単元(高校範囲)</p>
-            <p className="mt-0.5 text-sm">{result.reviewTopics.join(" / ")}</p>
+        <div className="rounded-xl bg-secondary p-3">
+          <div className="flex items-start gap-2">
+            <BookMarked className="mt-0.5 size-4 shrink-0 text-phase-basic" />
+            <div className="min-w-0 flex-1">
+              <p className="text-xs font-bold text-phase-basic">
+                復習すべき単元(高校範囲)
+              </p>
+              <p className="mt-0.5 text-sm">{result.reviewTopics.join(" / ")}</p>
+            </div>
           </div>
+          {subject !== undefined && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="mt-2"
+              disabled={pending || added}
+              onClick={onAddReview}
+            >
+              {added ? (
+                "復習リストに追加済み"
+              ) : (
+                <>
+                  <BookMarked className="size-4" /> 復習リストに追加
+                </>
+              )}
+            </Button>
+          )}
         </div>
       )}
 
@@ -111,25 +159,78 @@ function ResultCard({ result }: { result: GradingResult }) {
   );
 }
 
-export function GradingPanel({ history }: { history: GradingRecord[] }) {
+export function GradingPanel({
+  history,
+  userId,
+}: {
+  history: GradingRecord[];
+  userId: string;
+}) {
   const [subject, setSubject] = useState<GradingSubject>("math");
   const [question, setQuestion] = useState("");
   const [answer, setAnswer] = useState("");
   const [rubric, setRubric] = useState("");
   const [showRubric, setShowRubric] = useState(false);
   const [result, setResult] = useState<GradingResult | null>(null);
+  const [gradedSubject, setGradedSubject] = useState<GradingSubject>("math");
+  const [imagePath, setImagePath] = useState<string | null>(null);
+  const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const [uploading, setUploading] = useState(false);
   const [grading, startGrading] = useTransition();
   const [deleting, startDelete] = useTransition();
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  const onPickImage = async (file: File) => {
+    if (!file.type.startsWith("image/")) {
+      toast.error("画像ファイルを選択してください。");
+      return;
+    }
+    if (file.size > 8 * 1024 * 1024) {
+      toast.error("画像は8MB以内にしてください。");
+      return;
+    }
+    setUploading(true);
+    try {
+      const supabase = createClient();
+      const ext = (file.name.split(".").pop() ?? "jpg").toLowerCase();
+      const path = `${userId}/${crypto.randomUUID()}.${ext}`;
+      const { error } = await supabase.storage
+        .from("answers")
+        .upload(path, file, { contentType: file.type });
+      if (error) {
+        toast.error("画像のアップロードに失敗しました。");
+        return;
+      }
+      setImagePath(path);
+      setImagePreview(URL.createObjectURL(file));
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const clearImage = () => {
+    setImagePath(null);
+    if (imagePreview) URL.revokeObjectURL(imagePreview);
+    setImagePreview(null);
+    if (fileRef.current) fileRef.current.value = "";
+  };
 
   const onGrade = () => {
-    if (!question.trim() || !answer.trim() || grading) return;
+    if (!question.trim() || (!answer.trim() && !imagePath) || grading) return;
     setResult(null);
     startGrading(async () => {
-      const res = await submitGrading({ subject, question, answer, rubric });
+      const res = await submitGrading({
+        subject,
+        question,
+        answer,
+        rubric,
+        imagePath: imagePath ?? undefined,
+      });
       if (res.error) {
         toast.error(res.error);
       } else if (res.result) {
         setResult(res.result);
+        setGradedSubject(subject);
         toast.success("採点しました");
       }
     });
@@ -186,7 +287,51 @@ export function GradingPanel({ history }: { history: GradingRecord[] }) {
             value={answer}
             onChange={(e) => setAnswer(e.target.value)}
             rows={5}
-            placeholder="自分の答案を入力(途中式・論証も含めて書くほど採点が正確になります)"
+            placeholder="自分の答案を入力(途中式・論証も含めて書くほど採点が正確になります)。写真だけでもOK"
+          />
+          {/* 答案写真のアップロード */}
+          {imagePreview ? (
+            <div className="relative inline-block">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={imagePreview}
+                alt="答案プレビュー"
+                className="max-h-48 rounded-lg border"
+              />
+              <button
+                type="button"
+                onClick={clearImage}
+                className="absolute -right-2 -top-2 flex size-6 items-center justify-center rounded-full bg-destructive text-white"
+                aria-label="画像を削除"
+              >
+                <X className="size-3.5" />
+              </button>
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={() => fileRef.current?.click()}
+              disabled={uploading}
+              className="flex w-full items-center justify-center gap-2 rounded-lg border border-dashed py-3 text-sm text-muted-foreground transition-colors hover:border-primary/50 hover:text-foreground"
+            >
+              {uploading ? (
+                <Loader2 className="size-4 animate-spin" />
+              ) : (
+                <ImagePlus className="size-4" />
+              )}
+              手書き答案の写真をアップロード
+            </button>
+          )}
+          <input
+            ref={fileRef}
+            type="file"
+            accept="image/*"
+            capture="environment"
+            className="hidden"
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              if (file) onPickImage(file);
+            }}
           />
         </div>
 
@@ -215,7 +360,9 @@ export function GradingPanel({ history }: { history: GradingRecord[] }) {
 
         <Button
           onClick={onGrade}
-          disabled={grading || !question.trim() || !answer.trim()}
+          disabled={
+            grading || uploading || !question.trim() || (!answer.trim() && !imagePath)
+          }
           className="w-full"
         >
           {grading ? (
@@ -230,7 +377,7 @@ export function GradingPanel({ history }: { history: GradingRecord[] }) {
         </Button>
       </div>
 
-      {result && <ResultCard result={result} />}
+      {result && <ResultCard result={result} subject={gradedSubject} />}
 
       {/* 履歴 */}
       {history.length > 0 && (
@@ -260,7 +407,10 @@ export function GradingPanel({ history }: { history: GradingRecord[] }) {
                 </span>
               </summary>
               <div className="border-t px-3 pb-3 pt-2">
-                <ResultCard result={rec.result} />
+                <ResultCard
+                  result={rec.result}
+                  subject={rec.subject as GradingSubject}
+                />
                 <Button
                   variant="ghost"
                   size="sm"

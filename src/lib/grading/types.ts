@@ -19,12 +19,19 @@ export const GRADING_SUBJECT_LABELS: Record<GradingSubject, string> = {
   other: "その他",
 };
 
+export interface GradingImage {
+  base64: string;
+  mediaType: "image/jpeg" | "image/png" | "image/webp" | "image/gif";
+}
+
 export interface GradingRequest {
   subject: GradingSubject;
-  /** 問題文(テキスト)。画像対応は将来 image を足す */
+  /** 問題文(テキスト) */
   question: string;
-  /** ユーザーの解答 */
+  /** ユーザーの解答(テキスト)。画像のみの場合は空でよい */
   answer: string;
+  /** 答案の写真(手書きなど)。ある場合は vision で読み取る */
+  image?: GradingImage;
   /** 模範解答や配点(任意) */
   rubric?: string;
 }

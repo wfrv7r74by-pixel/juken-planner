@@ -173,7 +173,24 @@ export type GradingRecord = {
   answer: string;
   score: number;
   result: import("@/lib/grading/types").GradingResult;
+  image_path: string | null;
   created_at: string;
+};
+
+export type ReviewStatus = "todo" | "done";
+export type ReviewSource = "manual" | "grading";
+
+export type ReviewItem = {
+  id: string;
+  user_id: string;
+  subject: string;
+  topic: string;
+  detail: string | null;
+  status: ReviewStatus;
+  source: ReviewSource;
+  grading_id: string | null;
+  created_at: string;
+  done_at: string | null;
 };
 
 /** supabase-js の createClient に渡す Database 型 */
@@ -258,6 +275,13 @@ export type Database = {
             "user_id" | "subject" | "question" | "answer" | "score" | "result"
           >;
         Update: Partial<GradingRecord>;
+        Relationships: [];
+      };
+      review_items: {
+        Row: ReviewItem;
+        Insert: Partial<ReviewItem> &
+          Pick<ReviewItem, "user_id" | "topic">;
+        Update: Partial<ReviewItem>;
         Relationships: [];
       };
     };
