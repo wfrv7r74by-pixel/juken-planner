@@ -15,10 +15,10 @@ import { cn } from "@/lib/utils";
 import type { ChatMessage } from "@/types/database";
 
 const STARTERS = [
-  "京大工学部を目指してる。2027年2月の二次試験までの戦略を一緒に立てたい",
+  "志望校の試験日までの戦略を一緒に立てたい",
   "平日のルーティンを作りたい。授業がある日は朝と夜しか勉強できない",
-  "『やさしい理系数学』を教材に追加して。章立ても分けてほしい",
-  "最近数学の進みが悪い。フェーズ計画を見直したい",
+  "使っている教材を追加して、章立ても分けてほしい",
+  "最近ある科目の進みが悪い。フェーズ計画を見直したい",
 ];
 
 export function ChatPanel({ messages }: { messages: ChatMessage[] }) {
