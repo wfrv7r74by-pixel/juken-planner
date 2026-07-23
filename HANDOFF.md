@@ -198,9 +198,9 @@ src/types/database.ts      Supabase スキーマ型(Row型は type で定義。i
 6. `src/components/features/chat/ai-hub.tsx` と
    `src/components/features/learning/onboarding-form.tsx`(ヒアリングUIの統合先)
 7. `src/lib/ai/models.ts` / `src/lib/ai/gate.ts`(モデルティア・課金ゲート)
-8. 直近の AI相談仕様書(会話履歴内。5層モデル/計画生成§6/週次§7/受け入れ基準§10)
-   — 本リポジトリにはファイル化されていない。**未ファイル化**なので新セッションでは
-   会話に無ければユーザーに再提示を依頼するか、HANDOFFの要約(§5 P0-1)を仕様とする。
+8. **`docs/ai-learning-consultation-spec.md`**(AI学習相談の実装指示書 全文。5層モデル/
+   計画生成§6/週次§7/受け入れ基準§10/禁止事項§11。冒頭に確定済み前提あり)。
+   計画生成エンジンを実装する際の一次仕様。
 9. `supabase/migrations/0007_mocks.sql` / `0008_learning_profile.sql`(適用状況確認用)
 
 ---
