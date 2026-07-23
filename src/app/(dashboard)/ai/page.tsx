@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { AiHub } from "@/components/features/chat/ai-hub";
+import { loadProfile } from "@/lib/actions/learning";
 
 export const metadata: Metadata = { title: "AI相談 | 合格プランナー" };
 
@@ -37,11 +38,14 @@ export default async function AiPage() {
     );
   }
 
+  const profile = await loadProfile();
+
   return (
     <AiHub
       messages={messagesRes.data}
       milestones={milestonesRes.data}
       phases={phasesRes.data}
+      profile={profile}
     />
   );
 }

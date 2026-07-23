@@ -36,6 +36,7 @@ export function defaultProfile(): UserLearningProfile {
   return {
     goal: {
       targetSchools: unknownField(),
+      levelBand: unknownField(),
       admissionType: unknownField(),
       subjects: unknownField(),
       grade: unknownField(),
@@ -77,6 +78,7 @@ export function defaultProfile(): UserLearningProfile {
     },
     phase: "onboarding",
     completeness: 0,
+    answeredQuestionIds: [],
   };
 }
 

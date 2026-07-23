@@ -35,6 +35,8 @@ export interface TargetSchool {
 
 export interface GoalLayer {
   targetSchools: Field<TargetSchool[]>;
+  /** 志望校未定時の目標レベル帯 */
+  levelBand: Field<LevelBand>;
   admissionType: Field<AdmissionType[]>;
   subjects: Field<{ code: string; status: "fixed" | "undecided" }[]>;
   grade: Field<Grade>;
@@ -117,4 +119,6 @@ export interface UserLearningProfile {
   traits: TraitsLayer;
   phase: LearningPhase;
   completeness: number;
+  /** 回答済みの質問ID(「わからない」も含め、再提示しないため) */
+  answeredQuestionIds: string[];
 }

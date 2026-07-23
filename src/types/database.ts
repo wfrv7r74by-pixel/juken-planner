@@ -216,6 +216,26 @@ export type MockSubject = {
   created_at: string;
 };
 
+export type LearningPhaseState = "onboarding" | "diagnostic" | "steady";
+
+export type UserLearningProfileRow = {
+  user_id: string;
+  profile: import("@/lib/learning/types").UserLearningProfile;
+  phase: LearningPhaseState;
+  completeness: number;
+  updated_at: string;
+};
+
+export type UnitMasteryRow = {
+  id: string;
+  user_id: string;
+  subject: string;
+  unit: string;
+  level: number;
+  verified_by: "self_report" | "diagnostic" | "mock_exam" | "weekly_check";
+  updated_at: string;
+};
+
 export type ReviewItem = {
   id: string;
   user_id: string;
@@ -332,6 +352,20 @@ export type Database = {
         Insert: Partial<MockSubject> &
           Pick<MockSubject, "user_id" | "mock_id" | "subject">;
         Update: Partial<MockSubject>;
+        Relationships: [];
+      };
+      user_learning_profiles: {
+        Row: UserLearningProfileRow;
+        Insert: Partial<UserLearningProfileRow> &
+          Pick<UserLearningProfileRow, "user_id">;
+        Update: Partial<UserLearningProfileRow>;
+        Relationships: [];
+      };
+      unit_mastery: {
+        Row: UnitMasteryRow;
+        Insert: Partial<UnitMasteryRow> &
+          Pick<UnitMasteryRow, "user_id" | "subject" | "unit">;
+        Update: Partial<UnitMasteryRow>;
         Relationships: [];
       };
     };
