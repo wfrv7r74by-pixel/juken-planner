@@ -121,4 +121,11 @@ export interface UserLearningProfile {
   completeness: number;
   /** 回答済みの質問ID(「わからない」も含め、再提示しないため) */
   answeredQuestionIds: string[];
+  /** 1日の勉強可能ウィンドウ(HH:MM)。時間割生成でブロック配置に使う。 */
+  studyWindow?: {
+    weekdayStart: string;
+    weekdayEnd: string;
+    weekendStart: string;
+    weekendEnd: string;
+  };
 }

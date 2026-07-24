@@ -34,6 +34,8 @@ export type StudyPhase = {
   color: string;
   memo: string | null;
   sort_order: number;
+  /** ロードマップ区分の種別。手動作成の phase は null。 */
+  kind: import("@/lib/learning/roadmap").DivisionKind | null;
   created_at: string;
 };
 
@@ -236,6 +238,26 @@ export type UnitMasteryRow = {
   updated_at: string;
 };
 
+export type WeeklyPlanRow = {
+  id: string;
+  user_id: string;
+  week_start: string;
+  phase: LearningPhaseState;
+  theme: string | null;
+  plan: import("@/lib/learning/plan").WeeklyPlanData;
+  generated_by: "ai" | "deterministic";
+  created_at: string;
+  updated_at: string;
+};
+
+export type StudyRoadmapRow = {
+  user_id: string;
+  exam_date: string | null;
+  roadmap: import("@/lib/learning/roadmap").RoadmapData;
+  generated_by: "ai" | "deterministic";
+  updated_at: string;
+};
+
 export type ReviewItem = {
   id: string;
   user_id: string;
@@ -366,6 +388,19 @@ export type Database = {
         Insert: Partial<UnitMasteryRow> &
           Pick<UnitMasteryRow, "user_id" | "subject" | "unit">;
         Update: Partial<UnitMasteryRow>;
+        Relationships: [];
+      };
+      weekly_plans: {
+        Row: WeeklyPlanRow;
+        Insert: Partial<WeeklyPlanRow> &
+          Pick<WeeklyPlanRow, "user_id" | "week_start">;
+        Update: Partial<WeeklyPlanRow>;
+        Relationships: [];
+      };
+      study_roadmaps: {
+        Row: StudyRoadmapRow;
+        Insert: Partial<StudyRoadmapRow> & Pick<StudyRoadmapRow, "user_id">;
+        Update: Partial<StudyRoadmapRow>;
         Relationships: [];
       };
     };

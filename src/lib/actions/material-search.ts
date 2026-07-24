@@ -106,3 +106,20 @@ export async function confirmMaterial(data: {
   revalidatePath("/", "layout");
   return { error: null };
 }
+
+/** 教材名から AI 検索して、そのまま教材登録まで一気に行う(提案カードの「追加」用) */
+export async function quickAddMaterial(
+  title: string,
+): Promise<{ error: string | null }> {
+  const search = await searchMaterial(title);
+  if (search.error || !search.result) {
+    return { error: search.error ?? "教材を特定できませんでした。" };
+  }
+  return confirmMaterial({
+    subject: search.result.subject,
+    title: search.result.title,
+    sections: search.result.sections,
+    fit_score: search.result.fit_score,
+    fit_comment: search.result.fit_comment,
+  });
+}

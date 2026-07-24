@@ -4,6 +4,8 @@ import { redirect } from "next/navigation";
 import { CircleCheck, CircleAlert, ExternalLink } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { AccountSettings } from "@/components/features/settings/account-settings";
+import { MilestoneManager } from "@/components/features/settings/milestone-manager";
+import { PhaseManager } from "@/components/features/settings/phase-manager";
 import {
   Card,
   CardContent,
@@ -21,11 +23,12 @@ export default async function SettingsPage() {
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("display_name")
-    .eq("id", user.id)
-    .single();
+  const [profileRes, milestonesRes, phasesRes] = await Promise.all([
+    supabase.from("profiles").select("display_name").eq("id", user.id).single(),
+    supabase.from("milestones").select("*").eq("user_id", user.id).order("date"),
+    supabase.from("phases").select("*").eq("user_id", user.id).order("start_date"),
+  ]);
+  const profile = profileRes.data;
 
   const aiConfigured = Boolean(process.env.ANTHROPIC_API_KEY);
 
@@ -37,6 +40,17 @@ export default async function SettingsPage() {
         email={user.email ?? ""}
         displayName={profile?.display_name ?? ""}
       />
+
+      <section className="space-y-4">
+        <div>
+          <h2 className="font-heading text-lg font-semibold">計画データ</h2>
+          <p className="text-sm text-muted-foreground">
+            試験日程・フェーズを手動で調整します。通常は「勉強計画」の相談から自動で反映されます。
+          </p>
+        </div>
+        <MilestoneManager milestones={milestonesRes.data ?? []} />
+        <PhaseManager phases={phasesRes.data ?? []} />
+      </section>
 
       <Card>
         <CardHeader>
@@ -81,15 +95,15 @@ export default async function SettingsPage() {
         <CardContent className="space-y-2 text-sm text-muted-foreground">
           <p>合格プランナー v3 — AI と一緒に作る受験ダッシュボード</p>
           <p>
-            試験日程・フェーズの編集は{" "}
-            <Link href="/ai" className="text-primary underline">
-              AI相談の「計画データ」タブ
-            </Link>
-            、科目・教材は{" "}
+            試験日程・フェーズは上の「計画データ」、科目・教材は{" "}
             <Link href="/materials" className="text-primary underline">
               教材ページ
             </Link>{" "}
-            から。
+            から。計画づくりは{" "}
+            <Link href="/ai" className="text-primary underline">
+              勉強計画
+            </Link>{" "}
+            で行います。
           </p>
           <a
             href="https://github.com/wfrv7r74by-pixel/juken-planner"

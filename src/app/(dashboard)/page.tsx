@@ -295,7 +295,7 @@ export default async function DashboardPage() {
                 </>
               ) : (
                 <p className="mt-2 text-sm text-muted-foreground">
-                  <Link href="/ai" className="text-primary underline">
+                  <Link href="/settings" className="text-primary underline">
                     本命試験日を設定
                   </Link>
                 </p>

@@ -81,6 +81,18 @@ export type AnswerPayload =
   | { id: "availability.hours"; unknown: boolean; weekday?: number; weekend?: number }
   | { id: "materials.owned"; unknown: boolean; items?: { subject: string; title: string }[] }
   | { id: "level.entry"; unknown: boolean; hasMock?: boolean }
+  | {
+      id: "level.proxy";
+      unknown: boolean;
+      certName?: string;
+      certGrade?: string;
+      schoolLevelBand?: LevelBand;
+      rank?: number;
+      totalStudents?: number;
+      /** 新高1・高1向け: 高校入試の得点率(%) or 内申点。現在地の代替指標にする。 */
+      entranceScore?: number;
+      entranceLabel?: string;
+    }
   | { id: "traits.tone"; unknown: boolean; tone?: "strict" | "supportive" };
 
 /** 1問の回答をプロフィールへ反映する。「わからない」は仮値(estimated)で埋める。 */
@@ -206,6 +218,49 @@ export async function answerQuestion(
       );
       break;
     }
+    case "level.proxy":
+      // 代替指標(§5-3①)。自己申告なので推定値(estimated)で保持する。
+      // 「わからない」の場合は何も設定しない(第2層は未達のまま。UIで模試/診断へ誘導)。
+      if (!answer.unknown) {
+        if (answer.certName) {
+          p.currentLevel.proxyIndicators.certifications = setField(
+            [{ name: answer.certName, grade: answer.certGrade ?? "" }],
+            "estimated",
+            "user_input",
+          );
+        }
+        if (answer.schoolLevelBand) {
+          p.currentLevel.proxyIndicators.schoolLevelBand = setField(
+            answer.schoolLevelBand,
+            "estimated",
+            "user_input",
+          );
+        }
+        if (
+          typeof answer.rank === "number" &&
+          typeof answer.totalStudents === "number"
+        ) {
+          p.currentLevel.proxyIndicators.classRank = setField(
+            { rank: answer.rank, totalStudents: answer.totalStudents },
+            "estimated",
+            "user_input",
+          );
+        }
+        // 新高1・高1: 高校入試の得点/内申を現在地の代替指標にする(§5-3①)
+        if (typeof answer.entranceScore === "number") {
+          p.currentLevel.proxyIndicators.periodicTestScores = setField(
+            [
+              {
+                subject: answer.entranceLabel ?? "高校入試",
+                score: answer.entranceScore,
+              },
+            ],
+            "estimated",
+            "user_input",
+          );
+        }
+      }
+      break;
     case "traits.tone":
       p.traits.preferredTone = setField(
         answer.unknown ? "supportive" : (answer.tone ?? "supportive"),

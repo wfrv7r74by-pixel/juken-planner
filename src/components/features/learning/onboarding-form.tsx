@@ -1,12 +1,13 @@
 "use client";
 
 import { useMemo, useState, useTransition } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { CircleHelp, Sparkles } from "lucide-react";
+import { BookOpenCheck, CircleHelp, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import { answerQuestion, type AnswerPayload } from "@/lib/actions/learning";
 import {
-  QUESTIONS,
+  LEVEL_BANDS,
   pendingQuestions,
   type Question,
 } from "@/lib/learning/questions";
@@ -23,12 +24,20 @@ import { cn } from "@/lib/utils";
 
 const WEEKDAYS = ["日", "月", "火", "水", "木", "金", "土"];
 
-export function OnboardingForm({ profile }: { profile: UserLearningProfile }) {
+export function OnboardingForm({
+  profile,
+  onGoToPlan,
+}: {
+  profile: UserLearningProfile;
+  onGoToPlan?: () => void;
+}) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const pendingList = useMemo(() => pendingQuestions(profile), [profile]);
   const question = pendingList[0];
   const answeredCount = profile.answeredQuestionIds.length;
+  // 分母は「回答済み + 残り」の動的合計(条件分岐の質問数に追随する)
+  const totalCount = answeredCount + pendingList.length;
 
   const submit = (payload: AnswerPayload) => {
     startTransition(async () => {
@@ -38,20 +47,51 @@ export function OnboardingForm({ profile }: { profile: UserLearningProfile }) {
     });
   };
 
-  // 全問終了 or 生成可能
+  // ヒアリング完了。可処分時間(第4層)は勉強計画側の前提ステップで集めるため、
+  // ここでは第1・2層(志望校・現在地)が揃えば勉強計画へ進める。
   if (!question) {
     const gate = canGeneratePlan(profile);
+    const hearingMissing = gate.missing.filter((m) => !m.includes("第4層"));
+    const hearingOk = hearingMissing.length === 0;
     return (
       <div className="rounded-2xl border border-success/40 bg-card p-5 text-center">
         <Sparkles className="mx-auto size-8 text-success" />
         <p className="mt-2 font-heading text-lg font-semibold">
           ヒアリング完了
         </p>
-        <p className="mt-1 text-sm text-muted-foreground">
-          {gate.ok
-            ? "計画生成に必要な情報が揃いました。下の相談から計画を作れます。"
-            : `まだ不足があります: ${gate.missing.join(" / ")}`}
-        </p>
+        {hearingOk ? (
+          <div className="mt-2 space-y-3">
+            <p className="text-sm text-muted-foreground">
+              相談はここまででOKです。次は「勉強計画」で週の予定・宿題・基礎教材を入力します。
+            </p>
+            {onGoToPlan && (
+              <Button onClick={onGoToPlan}>
+                <Sparkles className="size-4" />
+                勉強計画へ進む
+              </Button>
+            )}
+          </div>
+        ) : (
+          <div className="mt-2 space-y-3 text-sm">
+            <p className="text-muted-foreground">
+              現在地(学力)がまだ分かりません。次のいずれかで解消できます:
+            </p>
+            <div className="rounded-xl border bg-muted/30 p-3 text-left">
+              <div className="flex flex-wrap items-center gap-2">
+                <Link
+                  href="/mocks"
+                  className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-xs font-bold text-primary-foreground"
+                >
+                  <BookOpenCheck className="size-3.5" />
+                  模試を登録する
+                </Link>
+                <span className="text-xs text-muted-foreground">
+                  または 英検などの資格を上のヒアリングで登録 / 診断テスト(近日対応)
+                </span>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     );
   }
@@ -60,12 +100,12 @@ export function OnboardingForm({ profile }: { profile: UserLearningProfile }) {
     <div className="space-y-3 rounded-2xl border bg-card p-5">
       <div className="flex items-center justify-between text-xs text-muted-foreground">
         <span>初回ヒアリング</span>
-        <span>{answeredCount} / {QUESTIONS.length} 問</span>
+        <span>{answeredCount} / {totalCount} 問</span>
       </div>
       <div className="h-1 overflow-hidden rounded-full bg-muted">
         <div
           className="h-full rounded-full bg-primary"
-          style={{ width: `${(answeredCount / QUESTIONS.length) * 100}%` }}
+          style={{ width: `${totalCount ? (answeredCount / totalCount) * 100 : 0}%` }}
         />
       </div>
 
@@ -103,13 +143,22 @@ function QuestionInput({
   const [schoolName, setSchoolName] = useState("");
   const [faculty, setFaculty] = useState("");
   const [examDate, setExamDate] = useState("");
-  const [weekday, setWeekday] = useState(2);
-  const [weekend, setWeekend] = useState(5);
   const [days, setDays] = useState<number[]>([]);
   const [retire, setRetire] = useState("");
   const [materials, setMaterials] = useState<{ subject: string; title: string }[]>([
     { subject: "", title: "" },
   ]);
+  // 現在地の代替指標(proxy)
+  const [proxyMethod, setProxyMethod] = useState<
+    "cert" | "school" | "entrance"
+  >("cert");
+  const [certName, setCertName] = useState("英検");
+  const [certGrade, setCertGrade] = useState("");
+  const [band, setBand] = useState("");
+  const [rank, setRank] = useState("");
+  const [total, setTotal] = useState("");
+  const [entranceKind, setEntranceKind] = useState<"内申点" | "得点率">("内申点");
+  const [entranceScore, setEntranceScore] = useState("");
 
   const toggle = (arr: number[] | string[], v: number | string, set: (a: never) => void) => {
     const has = (arr as (number | string)[]).includes(v);
@@ -193,23 +242,6 @@ function QuestionInput({
         </div>
       );
 
-    case "hours":
-      return (
-        <div className="space-y-3">
-          <label className="block text-sm">
-            平日: <span className="font-bold text-primary">{weekday}h</span>
-            <input type="range" min={0} max={10} step={0.5} value={weekday} onChange={(e) => setWeekday(Number(e.target.value))} className="w-full accent-[var(--color-primary)]" />
-          </label>
-          <label className="block text-sm">
-            休日: <span className="font-bold text-primary">{weekend}h</span>
-            <input type="range" min={0} max={14} step={0.5} value={weekend} onChange={(e) => setWeekend(Number(e.target.value))} className="w-full accent-[var(--color-primary)]" />
-          </label>
-          <Button disabled={pending} onClick={() => onSubmit({ id: "availability.hours", unknown: false, weekday, weekend })}>
-            次へ
-          </Button>
-        </div>
-      );
-
     case "club":
       return (
         <div className="space-y-3">
@@ -281,6 +313,176 @@ function QuestionInput({
           </Button>
         </div>
       );
+
+    case "proxy": {
+      const canSubmit =
+        proxyMethod === "cert"
+          ? certName.trim() !== "" && certGrade.trim() !== ""
+          : proxyMethod === "school"
+            ? band !== "" && rank.trim() !== "" && total.trim() !== ""
+            : band !== "" && entranceScore.trim() !== "";
+
+      const bandPicker = (
+        <div className="flex flex-wrap gap-2">
+          {LEVEL_BANDS.map((c) => (
+            <button
+              key={c.value}
+              type="button"
+              onClick={() => setBand(c.value)}
+              className={cn(
+                "rounded-xl border px-3 py-1.5 text-sm font-medium transition-colors",
+                band === c.value
+                  ? "border-primary bg-primary/15 text-primary"
+                  : "hover:border-primary/50",
+              )}
+            >
+              {c.label}
+            </button>
+          ))}
+        </div>
+      );
+
+      return (
+        <div className="space-y-3">
+          {/* 方法の切替 */}
+          <div className="grid grid-cols-3 gap-1 rounded-xl border p-1">
+            {(
+              [
+                { v: "cert", label: "資格(英検など)" },
+                { v: "school", label: "高校の成績(高2・3)" },
+                { v: "entrance", label: "高校入試(新高1)" },
+              ] as const
+            ).map((m) => (
+              <button
+                key={m.v}
+                type="button"
+                onClick={() => setProxyMethod(m.v)}
+                className={cn(
+                  "rounded-lg py-1.5 text-[11px] font-bold transition-colors sm:text-xs",
+                  proxyMethod === m.v
+                    ? "bg-primary text-primary-foreground"
+                    : "text-muted-foreground hover:text-foreground",
+                )}
+              >
+                {m.label}
+              </button>
+            ))}
+          </div>
+
+          {proxyMethod === "cert" && (
+            <div className="grid grid-cols-2 gap-2">
+              <select
+                value={certName}
+                onChange={(e) => setCertName(e.target.value)}
+                aria-label="資格の種類"
+                className="rounded-lg border bg-background px-3 py-2 text-sm"
+              >
+                {["英検", "TOEIC", "TOEFL", "その他"].map((c) => (
+                  <option key={c} value={c}>
+                    {c}
+                  </option>
+                ))}
+              </select>
+              <Input
+                value={certGrade}
+                onChange={(e) => setCertGrade(e.target.value)}
+                placeholder="級・スコア(例: 2級 / 650)"
+              />
+            </div>
+          )}
+
+          {proxyMethod === "school" && (
+            <div className="space-y-2">
+              {bandPicker}
+              <div className="grid grid-cols-2 gap-2">
+                <Input
+                  type="number"
+                  value={rank}
+                  onChange={(e) => setRank(e.target.value)}
+                  placeholder="学年順位(例: 40)"
+                  aria-label="学年順位"
+                />
+                <Input
+                  type="number"
+                  value={total}
+                  onChange={(e) => setTotal(e.target.value)}
+                  placeholder="学年人数(例: 320)"
+                  aria-label="学年人数"
+                />
+              </div>
+            </div>
+          )}
+
+          {proxyMethod === "entrance" && (
+            <div className="space-y-2">
+              <p className="text-xs text-muted-foreground">
+                入学した高校の学力帯を選び、高校入試の内申点か得点率を入れてください。
+              </p>
+              {bandPicker}
+              <div className="grid grid-cols-[110px_1fr] gap-2">
+                <select
+                  value={entranceKind}
+                  onChange={(e) =>
+                    setEntranceKind(e.target.value as "内申点" | "得点率")
+                  }
+                  aria-label="指標の種類"
+                  className="rounded-lg border bg-background px-3 py-2 text-sm"
+                >
+                  <option value="内申点">内申点</option>
+                  <option value="得点率">得点率(%)</option>
+                </select>
+                <Input
+                  type="number"
+                  value={entranceScore}
+                  onChange={(e) => setEntranceScore(e.target.value)}
+                  placeholder={
+                    entranceKind === "内申点"
+                      ? "内申点(例: 38 / 45)"
+                      : "得点率(例: 72)"
+                  }
+                  aria-label="高校入試の結果"
+                />
+              </div>
+            </div>
+          )}
+
+          <Button
+            disabled={pending || !canSubmit}
+            onClick={() =>
+              onSubmit(
+                proxyMethod === "cert"
+                  ? {
+                      id: "level.proxy",
+                      unknown: false,
+                      certName,
+                      certGrade,
+                    }
+                  : proxyMethod === "school"
+                    ? {
+                        id: "level.proxy",
+                        unknown: false,
+                        schoolLevelBand: band as LevelBand,
+                        rank: Number(rank),
+                        totalStudents: Number(total),
+                      }
+                    : {
+                        id: "level.proxy",
+                        unknown: false,
+                        schoolLevelBand: band as LevelBand,
+                        entranceScore: Number(entranceScore),
+                        entranceLabel:
+                          entranceKind === "内申点"
+                            ? "高校入試(内申)"
+                            : "高校入試(得点率%)",
+                      },
+              )
+            }
+          >
+            次へ
+          </Button>
+        </div>
+      );
+    }
 
     default:
       return null;

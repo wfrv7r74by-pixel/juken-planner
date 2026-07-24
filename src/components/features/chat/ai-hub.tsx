@@ -1,61 +1,85 @@
 "use client";
 
 import { useState } from "react";
-import { CalendarRange, ClipboardList, MessageCircle } from "lucide-react";
-import { ChatPanel } from "@/components/features/chat/chat-panel";
+import { CalendarCheck, ClipboardList } from "lucide-react";
 import { OnboardingForm } from "@/components/features/learning/onboarding-form";
-import { MilestoneManager } from "@/components/features/settings/milestone-manager";
-import { PhaseManager } from "@/components/features/settings/phase-manager";
+import { PrerequisitesForm } from "@/components/features/plan/prerequisites-form";
+import { RoadmapView } from "@/components/features/plan/roadmap-view";
 import { pendingQuestions } from "@/lib/learning/questions";
+import { hasAvailabilityLayer } from "@/lib/learning/profile";
 import { cn } from "@/lib/utils";
 import type { UserLearningProfile } from "@/lib/learning/types";
-import type { ChatMessage, Milestone, StudyPhase } from "@/types/database";
+import type { RoutineBlock, StudyRoadmapRow, Subject } from "@/types/database";
 
-const TABS = [
-  { id: "hearing", label: "学習相談", icon: ClipboardList },
-  { id: "chat", label: "相談チャット", icon: MessageCircle },
-  { id: "data", label: "計画データ", icon: CalendarRange },
+const STEPS = [
+  { id: "consult", label: "相談", icon: ClipboardList },
+  { id: "plan", label: "勉強計画", icon: CalendarCheck },
 ] as const;
 
-type TabId = (typeof TABS)[number]["id"];
+type StepId = (typeof STEPS)[number]["id"];
 
-/** 学習相談(ヒアリング)+ AI相談 + 計画データ管理を1画面に統合するハブ */
+/**
+ * 「相談 → 勉強計画」の2ステップ一本道。
+ * ① 相談: 初回ヒアリング(志望校・現在地などの情報収集)。
+ * ② 勉強計画: 前提入力(固定予定・宿題・基礎教材)→ 区分ロードマップ＋今週の計画。
+ */
 export function AiHub({
-  messages,
-  milestones,
-  phases,
   profile,
+  roadmap,
+  weekBlocks,
+  subjects,
+  materials,
+  lifeBlocks,
 }: {
-  messages: ChatMessage[];
-  milestones: Milestone[];
-  phases: StudyPhase[];
   profile: UserLearningProfile;
+  roadmap: StudyRoadmapRow | null;
+  weekBlocks: RoutineBlock[];
+  subjects: Subject[];
+  materials: { subject: string; title: string }[];
+  lifeBlocks: {
+    weekday: number;
+    startTime: string;
+    endTime: string;
+    title: string;
+  }[];
 }) {
   const hearingPending = pendingQuestions(profile).length > 0;
-  const [tab, setTab] = useState<TabId>(hearingPending ? "hearing" : "chat");
+  const prereqDone = hasAvailabilityLayer(profile);
+  const [step, setStep] = useState<StepId>(
+    hearingPending ? "consult" : "plan",
+  );
 
   return (
     <div className="mx-auto max-w-2xl space-y-4">
-      <div className="grid grid-cols-3 gap-1 rounded-2xl border bg-card p-1">
-        {TABS.map(({ id, label, icon: Icon }) => (
+      {/* ステップ切替 */}
+      <div className="grid grid-cols-2 gap-1 rounded-2xl border bg-card p-1">
+        {STEPS.map(({ id, label, icon: Icon }, i) => (
           <button
             key={id}
             type="button"
-            onClick={() => setTab(id)}
+            onClick={() => setStep(id)}
             className={cn(
-              "flex items-center justify-center gap-1.5 rounded-xl py-2 text-xs font-bold transition-colors sm:text-sm",
-              tab === id
+              "flex items-center justify-center gap-1.5 rounded-xl py-2.5 text-sm font-bold transition-colors",
+              step === id
                 ? "bg-primary text-primary-foreground"
                 : "text-muted-foreground hover:text-foreground",
             )}
           >
+            <span
+              className={cn(
+                "flex size-5 items-center justify-center rounded-full text-xs",
+                step === id ? "bg-primary-foreground/20" : "bg-muted",
+              )}
+            >
+              {i + 1}
+            </span>
             <Icon className="size-4" />
             {label}
-            {id === "hearing" && hearingPending && (
+            {id === "consult" && hearingPending && (
               <span
                 className={cn(
                   "size-1.5 rounded-full",
-                  tab === id ? "bg-primary-foreground" : "bg-primary",
+                  step === id ? "bg-primary-foreground" : "bg-primary",
                 )}
               />
             )}
@@ -63,27 +87,30 @@ export function AiHub({
         ))}
       </div>
 
-      {tab === "hearing" && (
+      {step === "consult" && (
         <div className="space-y-3">
           <p className="text-xs text-muted-foreground">
-            最初に数問だけ答えてください。答えるほど計画の精度が上がります。
-            「わからない」で飛ばしてもOK(あとで週次相談で少しずつ埋めます)。
+            まず数問だけ答えてください。答えるほど計画の精度が上がります。
+            「わからない」で飛ばしてもOK(あとで少しずつ埋められます)。
           </p>
-          <OnboardingForm profile={profile} />
+          <OnboardingForm profile={profile} onGoToPlan={() => setStep("plan")} />
         </div>
       )}
 
-      {tab === "chat" && <ChatPanel messages={messages} />}
-
-      {tab === "data" && (
-        <div className="space-y-5">
-          <p className="text-xs text-muted-foreground">
-            AI の提案を「反映」すると自動でここに登録されます。手動で細かく調整したい場合に使ってください。
-          </p>
-          <MilestoneManager milestones={milestones} />
-          <PhaseManager phases={phases} />
-        </div>
-      )}
+      {step === "plan" &&
+        (!prereqDone ? (
+          <PrerequisitesForm profile={profile} materials={materials} />
+        ) : (
+          <RoadmapView
+            profile={profile}
+            roadmap={roadmap}
+            weekBlocks={weekBlocks}
+            subjects={subjects}
+            materials={materials}
+            lifeBlocks={lifeBlocks}
+            onGoToConsult={() => setStep("consult")}
+          />
+        ))}
     </div>
   );
 }

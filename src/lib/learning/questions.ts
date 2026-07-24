@@ -1,7 +1,11 @@
 // 初回ヒアリングの質問定義(§4-2 必須10問)。
 // すべて「わからない/未定」を持ち、選択式を基本とする。
 import type { UserLearningProfile } from "./types";
-import { hasGoalLayer, hasAvailabilityLayer } from "./profile";
+import {
+  hasGoalLayer,
+  hasAvailabilityLayer,
+  hasCurrentLevelLayer,
+} from "./profile";
 
 export type QuestionId =
   | "goal.school"
@@ -11,9 +15,9 @@ export type QuestionId =
   | "goal.grade"
   | "availability.club"
   | "availability.job"
-  | "availability.hours"
   | "materials.owned"
   | "level.entry"
+  | "level.proxy"
   | "traits.tone";
 
 export interface Choice {
@@ -29,7 +33,8 @@ export type QuestionType =
   | "club" // 部活(有無+引退月)
   | "job" // バイト曜日
   | "materials" // 教材(科目+名称)
-  | "mock"; // 模試の有無
+  | "mock" // 模試の有無
+  | "proxy"; // 現在地の代替指標(模試なし時, §5-3①)
 
 export interface Question {
   id: QuestionId;
@@ -134,13 +139,6 @@ export const QUESTIONS: Question[] = [
     unknownLabel: "していない",
   },
   {
-    id: "availability.hours",
-    title: "1日に勉強に使える時間は?",
-    help: "背伸びせず、現実的な時間で",
-    type: "hours",
-    unknownLabel: "わからない(平日2h/休日5hで仮置き)",
-  },
-  {
     id: "materials.owned",
     title: "持っている参考書・問題集は?",
     help: "科目と教材名。あとで検索追加もできます",
@@ -164,20 +162,42 @@ export const QUESTIONS: Question[] = [
 ];
 
 /**
+ * 現在地の代替指標(§5-3①)。模試なしユーザーで第2層が未取得のときだけ聞く。
+ * 英検などの資格、または高校の学力帯＋学年順位で現在地を推定できる。
+ */
+export const PROXY_QUESTION: Question = {
+  id: "level.proxy",
+  title: "今の学力の目安を教えてください",
+  help: "模試がなくても、英検などの資格 / 高校の成績＋学年順位(高2・高3) / 高校入試の結果(新高1・高1)で現在地を推定できます",
+  type: "proxy",
+  unknownLabel: "わからない(診断テストは近日対応)",
+};
+
+/**
  * プロフィールを見て、まだ聞いていない質問だけを返す(一度聞いた項目は再提示しない)。
  * 回答済みは answeredQuestionIds で判定(「わからない」を選んでも再提示しない)。
  * goal.levelBand は志望校が確定しているなら不要。
+ * 模試なし & 第2層未取得なら、代替指標(level.proxy)を末尾に追加する。
  */
 export function pendingQuestions(p: UserLearningProfile): Question[] {
   const answered = new Set(p.answeredQuestionIds);
   const schoolsSet = (p.goal.targetSchools.value?.length ?? 0) > 0;
 
-  return QUESTIONS.filter((q) => {
+  const base = QUESTIONS.filter((q) => {
     if (answered.has(q.id)) return false;
     // レベル帯は志望校が確定しているなら不要
     if (q.id === "goal.levelBand" && schoolsSet) return false;
     return true;
   });
+
+  // 模試を「なし」と答え、かつ現在地(第2層)がまだ埋まっていないなら代替指標を聞く
+  const needProxy =
+    answered.has("level.entry") &&
+    !p.currentLevel.hasMockExam &&
+    !hasCurrentLevelLayer(p) &&
+    !answered.has("level.proxy");
+
+  return needProxy ? [...base, PROXY_QUESTION] : base;
 }
 
 // 進行度: 第1・4層が揃えば計画生成に進める
